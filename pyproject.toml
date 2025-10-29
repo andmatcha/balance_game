@@ -1,0 +1,32 @@
+[project]
+name = "balance-game"
+version = "0.1.0"
+description = "Webカメラで遊べるカメラバランスゲーム"
+readme = "README.md"
+requires-python = ">=3.9,<3.10"
+dependencies = [
+    "numpy==1.26.4",
+    "opencv-python==4.10.0.84",
+    "mediapipe>=0.10",
+]
+
+[project.scripts]
+balance-game = "balance_game.app:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["balance_game*"]

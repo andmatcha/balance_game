@@ -1,0 +1,12 @@
+.vscode
+.venv
+.DS_Store
+
+# for python
+__pycache__
+*.pyc
+.ipynb_checkpoints
+*.npy
+
+/third/data/
+/third/mask_results/
