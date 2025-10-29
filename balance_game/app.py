@@ -46,6 +46,8 @@ def main():
         frame = cam.read()
         if frame is None:
             break
+        # インカメラの左右反転を補正（水平反転）
+        frame = cv2.flip(frame, 1)
 
         dt_s = timer.tick()
         det = detector.detect(frame)
@@ -67,26 +69,28 @@ def main():
             )
             base_width = int(max(60, min(240, shoulder_w * 0.8)))
 
-        # 頭上の位置（鼻があれば少し上へ）
+        # 頭上の位置は矩形サイズに依存させる（鼻から矩形高さの約60%上）
         head_center = None
-        if det.keypoints.nose:
-            head_center = Point2D(
-                det.keypoints.nose.x, det.keypoints.nose.y - base_width * 0.35
-            )
-
-        # 手首
-        lw = det.keypoints.left_wrist
-        rw = det.keypoints.right_wrist
 
         # 長方形の描画（頭上）
         from .utils.drawing import draw_rotated_rect
 
-        if head_center is not None:
+        if det.keypoints.head_top is not None or det.keypoints.nose is not None:
             rect_w = max(10, int(base_width * 0.22))
             rect_h = max(20, int(base_width * 1.2))
             obj_angle = (
                 metrics.object_tilt_deg if hasattr(metrics, "object_tilt_deg") else 0.0
             )
+            if det.keypoints.head_top is not None:
+                # 頭頂部の水平線の“上”（矩形高さの半分だけ上）に配置
+                head_center = Point2D(
+                    det.keypoints.head_top.x, det.keypoints.head_top.y - rect_h * 0.5
+                )
+            else:
+                # フォールバック: 鼻基準
+                head_center = Point2D(
+                    det.keypoints.nose.x, det.keypoints.nose.y - rect_h * 0.6  # type: ignore
+                )
             draw_rotated_rect(
                 frame,
                 _int_point(head_center),
@@ -96,6 +100,29 @@ def main():
                 color=(0, 200, 255),
                 alpha=0.85,
             )
+
+        # 頭頂部・顎先の点と直線
+        if det.keypoints.head_top is not None and det.keypoints.chin is not None:
+            ht = _int_point(det.keypoints.head_top)
+            ch = _int_point(det.keypoints.chin)
+            cv2.circle(frame, ht, 5, (0, 255, 0), -1)
+            cv2.circle(frame, ch, 5, (0, 0, 255), -1)
+            cv2.line(frame, ht, ch, (255, 255, 0), 2, cv2.LINE_AA)
+            # 直交ガイドライン（長さ=顔幅程度）
+            vx = float(ch[0] - ht[0])
+            vy = float(ch[1] - ht[1])
+            norm = (vx * vx + vy * vy) ** 0.5
+            if norm > 1e-6:
+                nx = -vy / norm
+                ny = vx / norm
+                face_w = float(base_width)
+                if "face_bbox" in det.metadata:
+                    x1, y1, x2, y2 = det.metadata["face_bbox"]  # type: ignore
+                    face_w = max(10.0, float(x2 - x1))
+                half = int(face_w * 0.5)
+                p1 = (int(ht[0] + nx * half), int(ht[1] + ny * half))
+                p2 = (int(ht[0] - nx * half), int(ht[1] - ny * half))
+                cv2.line(frame, p1, p2, (255, 0, 255), 2, cv2.LINE_AA)
 
         # HUD
         from .ui import draw_hud

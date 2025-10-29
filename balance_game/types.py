@@ -18,6 +18,8 @@ class Keypoints2D:
     right_wrist: Optional[Point2D] = None
     left_shoulder: Optional[Point2D] = None
     right_shoulder: Optional[Point2D] = None
+    head_top: Optional[Point2D] = None
+    chin: Optional[Point2D] = None
 
 
 @dataclass
