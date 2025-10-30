@@ -46,6 +46,26 @@ PC接続のWebカメラで上半身の姿勢を推定し、頭上に縦長の長
 - UI: タイマー、難易度表示、状態、ヒント用ガイドライン
 - ログ/保存（任意）: スクリーンショット、CSVログ
 
+### 画面/遷移とUI
+- 画面（Screen）:
+  - Title: タイトル表示、難易度表示、操作ガイド（1/2/3, SPACE）。
+  - Countdown: 中央に残り秒数（3→2→1）。終了で自動的に Playing へ遷移。
+  - Playing: 既存HUD（タイマー・難易度・傾き等）＋安定時間の進捗。Fail/Clear 判定。
+  - Result: GAME CLEAR/OVER とスコア（Elapsed/Stable）表示。SPACE で Title へ。
+- 遷移:
+  - Title -(SPACE)-> Countdown -(3s経過)-> Playing -(Clear/Fail)-> Result -(SPACE)-> Title
+  - 難易度切替（1/2/3）は常時可。Reset（R）は Title に戻す。
+- 実装指針:
+  - `GameStatus` は COUNTDOWN/PLAYING/CLEAR/FAIL を管理。
+  - `Screen` は Title/Result を含む外側のUI状態を管理（`app.py` で保持）。
+  - `ui.py` に `draw_title`, `draw_result`, 既存 `draw_hud` を用意。
+
+### UI実装方針（ライブラリ選定）
+- ベースライン: OpenCV のみで実装（追加依存なし、最小実装・低コスト）。
+- 代替案（将来拡張時）:
+  - Pygame(+pygame-menu): メニュー/効果音/フォント強化に適。OpenCV→Surface 変換が必要。
+  - GUI系（PyQt/DearPyGui）: 高機能だが本要件には過剰。
+
 ### 非機能要件
 - モジュール分割（単一責務）で可読性・保守性を確保
 - 設定の外部化と難易度切替の容易さ
@@ -161,8 +181,9 @@ uv run -m balance_game.app
 ```
 
 キー操作:
-- S: 3秒カウントダウン開始 → PLAYING へ遷移
-- R: リセット（READY へ）
+- SPACE: Titleで開始（Countdownへ）/ ResultからTitleに戻る
+- S: 3秒カウントダウン開始（デバッグ/代替）
+- R: リセット（Title へ）
 - Q: 終了
 - 1/2/3: 難易度切替（easy/normal/hard）
 

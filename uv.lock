@@ -4,7 +4,8 @@ requires-python = "==3.9.*"
 resolution-markers = [
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
     "platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "(platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux')",
+    "sys_platform == 'emscripten'",
 ]
 
 [[package]]
@@ -33,6 +34,7 @@ dependencies = [
     { name = "mediapipe" },
     { name = "numpy" },
     { name = "opencv-python" },
+    { name = "pymunk" },
 ]
 
 [package.optional-dependencies]
@@ -45,6 +47,7 @@ requires-dist = [
     { name = "mediapipe", specifier = ">=0.10" },
     { name = "numpy", specifier = "==1.26.4" },
     { name = "opencv-python", specifier = "==4.10.0.84" },
+    { name = "pymunk", specifier = ">=7.1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
 ]
 provides-extras = ["dev"]
@@ -449,6 +452,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631, upload-time = "2025-06-21T13:39:12.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217, upload-time = "2025-06-21T13:39:07.939Z" },
+]
+
+[[package]]
+name = "pymunk"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/57/25/ee7ff873cec8aee64751b284c7cba2bd3e7364f67b9bd7d41b16a8ab358f/pymunk-7.1.0.tar.gz", hash = "sha256:f3045897261325bb3e89284402dd43b908d0a5871dc2010597e36b4309f0229b", size = 3355569, upload-time = "2025-06-30T19:39:08.81Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/ef/96dd549109f43f4ec0394296a4e5e6a935d9bd4d5b53d9e17cb0ef996598/pymunk-7.1.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:d3fdc568b37a89cd2fa2d0af5416981c864315bb34f6cce94b0c66937b3b7b9e", size = 366946, upload-time = "2025-06-29T20:06:34.987Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/60/892d31ebdb6e07b628fe27088fe9e63b84b6f3a08cff46571f2c3e53c0ae/pymunk-7.1.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:a49ac2fd3b14efd31231109a6759efba1dbbc0297fa1ec3061f7f225bc494bf1", size = 350060, upload-time = "2025-06-29T20:06:36.555Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/69/22f359303bd7e8a17124526406ec49879fb77b843316e5526920c6f9b6ba/pymunk-7.1.0-cp39-cp39-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3ba501730bb1ce61fa9ddcf3764f267b1eb7757cab879e7c368546f43ff420ea", size = 990209, upload-time = "2025-06-29T20:06:38.936Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/6b/49bca85c2ae3014dc32071d1ae50edfa3a3874ddf68c0be5480672face7d/pymunk-7.1.0-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:310bc4d6ede87ffd14008f2a696b0a52aa8563753a7d19b4343540d0339d3217", size = 1010808, upload-time = "2025-06-29T20:06:42.487Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/d6/abda6ad4d59964e3aad54768dd1b60f2437a4bc996150cae2e06339240f2/pymunk-7.1.0-cp39-cp39-musllinux_1_2_aarch64.whl", hash = "sha256:c29b3780b855f058c5a528069a437a1e16b1b81f1433c5f58b2661d9b3cccd90", size = 987096, upload-time = "2025-06-29T20:06:45.433Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/6a/9b91bc2d19b9f419e4899d1e67be496485769b16cbc6ba3fefef51b80b09/pymunk-7.1.0-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:ba23f4e2d67cc3ee0f8433c471755a6731212cf579d9310396d156bc4805d009", size = 1010759, upload-time = "2025-06-29T20:06:48.218Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/cc/98940c9e25a3c6996ebaa90140cbfe19cf678be85fd240e06ceb94fa19d0/pymunk-7.1.0-cp39-cp39-win32.whl", hash = "sha256:efb27cc501fc409060c85b78c972aad619122c57156fc982e69c9b5994348596", size = 317981, upload-time = "2025-06-29T20:06:49.915Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/b3/7dc435ec97cf8cb12696ca3c405b8354b12d2386c6c4049f6e7469709a37/pymunk-7.1.0-cp39-cp39-win_amd64.whl", hash = "sha256:180bb2f7a3df45c39dea6ca0d8c6c31b3d6aeb6e1442df1022fdcaf13b51dc03", size = 367907, upload-time = "2025-06-29T20:06:51.74Z" },
 ]
 
 [[package]]

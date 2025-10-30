@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from .types import Keypoints2D, Point2D, StabilizerConfig
-from .utils.geometry import midpoint, vertical_tilt_deg
+from .utils.geometry import vertical_tilt_deg
 
 
 @dataclass
@@ -25,10 +25,12 @@ class BalancePhysics:
         self.motion = MotionState()
 
     def _compute_tilt(self, kps: Keypoints2D) -> float:
-        if kps.left_shoulder and kps.right_shoulder and kps.nose:
-            origin = midpoint(kps.left_shoulder, kps.right_shoulder)
-            return float(vertical_tilt_deg(origin, kps.nose))
-        # 肩が無い場合は傾き 0 と仮定（寛容）
+        # 頭頂部→顎先ベクトルの縦方向からの傾き（肩を使わない）
+        if kps.head_top and kps.chin:
+            return float(vertical_tilt_deg(kps.head_top, kps.chin))
+        # フォールバック: 鼻がある場合は頭頂部→鼻
+        if kps.head_top and kps.nose:
+            return float(vertical_tilt_deg(kps.head_top, kps.nose))
         return 0.0
 
     def _compute_speed(self, a: Point2D, b: Point2D, dt_s: float) -> float:
@@ -106,9 +108,10 @@ class RectanglePhysics:
         self.state = RectMotionState()
 
     def _head_tilt(self, kps: Keypoints2D) -> float:
-        if kps.left_shoulder and kps.right_shoulder and kps.nose:
-            origin = midpoint(kps.left_shoulder, kps.right_shoulder)
-            return float(vertical_tilt_deg(origin, kps.nose))
+        if kps.head_top and kps.chin:
+            return float(vertical_tilt_deg(kps.head_top, kps.chin))
+        if kps.head_top and kps.nose:
+            return float(vertical_tilt_deg(kps.head_top, kps.nose))
         return 0.0
 
     def _nose_vx(self, kps: Keypoints2D, dt_s: float) -> float:

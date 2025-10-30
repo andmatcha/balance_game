@@ -3,7 +3,6 @@ __all__ = [
     "camera",
     "config",
     "game_logic",
-    "overlay",
     "physics",
     "pose_detector",
     "types",
