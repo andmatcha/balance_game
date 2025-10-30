@@ -19,9 +19,6 @@ def _int_point(p: Point2D) -> tuple[int, int]:
     return int(p.x), int(p.y)
 
 
-## デバッグ用の点描画関数は未使用のため削除しました
-
-
 class Screen(Enum):
     TITLE = auto()
     PREPARE = auto()
@@ -38,8 +35,6 @@ def main():
     cam = Camera(index=1)
     detector = PoseDetector(mirrored=True)
     timer = FrameTimer()
-
-    # 長方形描画を使用するため画像アセットは未使用
 
     window_name = "Balance Game"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -127,8 +122,6 @@ def main():
                 p1 = (int(ht[0] + nx * half), int(ht[1] + ny * half))
                 p2 = (int(ht[0] - nx * half), int(ht[1] - ny * half))
                 cv2.line(frame, p1, p2, (255, 0, 255), 2, cv2.LINE_AA)
-
-        # 肩・肘・手首の描画は不要のため削除
 
         # 人差し指各関節（MCP/PIP/DIP/TIP）
         def _draw_index(side: str, color: tuple[int, int, int]):
