@@ -9,11 +9,14 @@ from .types import DetectionResult, Keypoints2D, Point2D
 
 
 class PoseDetector:
-    def __init__(self):
+    def __init__(self, mirrored: bool = False):
         self._mp_pose = None
         self._pose = None
         self._mp_face_mesh = None
         self._face_mesh = None
+        self._mp_hands = None
+        self._hands = None
+        self._mirrored = mirrored
         try:
             import mediapipe as mp  # type: ignore
 
@@ -31,6 +34,15 @@ class PoseDetector:
                 static_image_mode=False,
                 max_num_faces=1,
                 refine_landmarks=True,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            # Hands（人差し指先の高精度化）
+            self._mp_hands = mp.solutions.hands
+            self._hands = self._mp_hands.Hands(
+                static_image_mode=False,
+                max_num_hands=2,
+                model_complexity=1,
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5,
             )
@@ -68,6 +80,13 @@ class PoseDetector:
                 keypoints.right_wrist = safe_get(pm.RIGHT_WRIST.value)
                 keypoints.left_shoulder = safe_get(pm.LEFT_SHOULDER.value)
                 keypoints.right_shoulder = safe_get(pm.RIGHT_SHOULDER.value)
+                keypoints.left_elbow = safe_get(pm.LEFT_ELBOW.value)
+                keypoints.right_elbow = safe_get(pm.RIGHT_ELBOW.value)
+                # 人差し指先（INDEX 指先）
+                if hasattr(pm, "LEFT_INDEX"):
+                    keypoints.left_index = safe_get(pm.LEFT_INDEX.value)
+                if hasattr(pm, "RIGHT_INDEX"):
+                    keypoints.right_index = safe_get(pm.RIGHT_INDEX.value)
                 # 続けて FaceMesh を処理（頭頂部/顎先）
                 if self._face_mesh is not None:
                     fresult = self._face_mesh.process(rgb)
@@ -114,5 +133,68 @@ class PoseDetector:
                                 int(max_y),
                             )
                             meta["face_mesh"] = True
+                # Hands で人差し指先を優先取得
+                if self._hands is not None:
+                    hresult = self._hands.process(rgb)
+                    if hresult.multi_hand_landmarks:
+                        for i, hls in enumerate(hresult.multi_hand_landmarks):
+                            label = None
+                            try:
+                                if hresult.multi_handedness and i < len(
+                                    hresult.multi_handedness
+                                ):
+                                    label = (
+                                        hresult.multi_handedness[i]
+                                        .classification[0]
+                                        .label.lower()
+                                    )  # 'left' | 'right'
+                            except Exception:
+                                label = None
+                            try:
+                                # 各関節: MCP(5), PIP(6), DIP(7), TIP(8)
+                                ids = {"mcp": 5, "pip": 6, "dip": 7, "tip": 8}
+                                coords: dict[str, tuple[float, float]] = {}
+                                for k, idx in ids.items():
+                                    lmpt = hls.landmark[idx]
+                                    x = float(lmpt.x * w)
+                                    y = float(lmpt.y * h)
+                                    if 0 <= x < w and 0 <= y < h:
+                                        coords[k] = (x, y)
+                                mapped = label
+                                if self._mirrored and label in ("left", "right"):
+                                    mapped = "right" if label == "left" else "left"
+                                if mapped == "left":
+                                    if "tip" in coords:
+                                        keypoints.left_index = Point2D(*coords["tip"])
+                                    if "mcp" in coords:
+                                        keypoints.left_index_mcp = Point2D(
+                                            *coords["mcp"]
+                                        )
+                                    if "pip" in coords:
+                                        keypoints.left_index_pip = Point2D(
+                                            *coords["pip"]
+                                        )
+                                    if "dip" in coords:
+                                        keypoints.left_index_dip = Point2D(
+                                            *coords["dip"]
+                                        )
+                                elif mapped == "right":
+                                    if "tip" in coords:
+                                        keypoints.right_index = Point2D(*coords["tip"])
+                                    if "mcp" in coords:
+                                        keypoints.right_index_mcp = Point2D(
+                                            *coords["mcp"]
+                                        )
+                                    if "pip" in coords:
+                                        keypoints.right_index_pip = Point2D(
+                                            *coords["pip"]
+                                        )
+                                    if "dip" in coords:
+                                        keypoints.right_index_dip = Point2D(
+                                            *coords["dip"]
+                                        )
+                            except Exception:
+                                pass
+                        meta["hands"] = True
                 return DetectionResult(keypoints=keypoints, metadata=meta)
         return DetectionResult(keypoints=keypoints, metadata=meta)

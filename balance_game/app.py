@@ -34,7 +34,7 @@ def main():
     physics = RectanglePhysics(cfg.stabilizer)
 
     cam = Camera(index=1)
-    detector = PoseDetector()
+    detector = PoseDetector(mirrored=True)
     timer = FrameTimer()
 
     # 長方形描画を使用するため画像アセットは未使用
@@ -123,6 +123,75 @@ def main():
                 p1 = (int(ht[0] + nx * half), int(ht[1] + ny * half))
                 p2 = (int(ht[0] - nx * half), int(ht[1] - ny * half))
                 cv2.line(frame, p1, p2, (255, 0, 255), 2, cv2.LINE_AA)
+
+        # 腕の点と線（肩-肘-手首-人差し指先）
+        def _draw_arm(side: str, color: tuple[int, int, int]):
+            shoulder = (
+                det.keypoints.left_shoulder
+                if side == "left"
+                else det.keypoints.right_shoulder
+            )
+            elbow = (
+                det.keypoints.left_elbow
+                if side == "left"
+                else det.keypoints.right_elbow
+            )
+            wrist = (
+                det.keypoints.left_wrist
+                if side == "left"
+                else det.keypoints.right_wrist
+            )
+            index_base = (
+                det.keypoints.left_index_mcp
+                if side == "left"
+                else det.keypoints.right_index_mcp
+            )
+            pts = []
+            for p in [shoulder, elbow, wrist, index_base]:
+                if p is not None:
+                    pts.append(_int_point(p))
+                else:
+                    pts.append(None)
+            # 点
+            for pt in pts:
+                if pt is not None:
+                    cv2.circle(frame, pt, 4, color, -1)
+            # 線（隣接を接続）
+            for i in range(3):
+                a, b = pts[i], pts[i + 1]
+                if a is not None and b is not None:
+                    cv2.line(frame, a, b, color, 2, cv2.LINE_AA)
+
+        _draw_arm("left", (0, 255, 255))
+        _draw_arm("right", (255, 128, 0))
+
+        # 人差し指各関節（MCP/PIP/DIP/TIP）
+        def _draw_index(side: str, color: tuple[int, int, int]):
+            if side == "left":
+                mcp = det.keypoints.left_index_mcp
+                pip = det.keypoints.left_index_pip
+                dip = det.keypoints.left_index_dip
+                tip = det.keypoints.left_index
+            else:
+                mcp = det.keypoints.right_index_mcp
+                pip = det.keypoints.right_index_pip
+                dip = det.keypoints.right_index_dip
+                tip = det.keypoints.right_index
+            pts = []
+            for p in [mcp, pip, dip, tip]:
+                pts.append(_int_point(p) if p is not None else None)
+            # 点
+            for pt in pts:
+                if pt is not None:
+                    cv2.circle(frame, pt, 3, color, -1)
+            # 線（隣接接続）
+            for i in range(3):
+                a, b = pts[i], pts[i + 1]
+                if a is not None and b is not None:
+                    cv2.line(frame, a, b, color, 2, cv2.LINE_AA)
+
+        _draw_index("left", (0, 200, 0))
+        _draw_index("right", (0, 0, 200))
 
         # HUD
         from .ui import draw_hud

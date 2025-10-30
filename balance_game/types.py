@@ -20,6 +20,16 @@ class Keypoints2D:
     right_shoulder: Optional[Point2D] = None
     head_top: Optional[Point2D] = None
     chin: Optional[Point2D] = None
+    left_elbow: Optional[Point2D] = None
+    right_elbow: Optional[Point2D] = None
+    left_index: Optional[Point2D] = None
+    right_index: Optional[Point2D] = None
+    left_index_mcp: Optional[Point2D] = None
+    left_index_pip: Optional[Point2D] = None
+    left_index_dip: Optional[Point2D] = None
+    right_index_mcp: Optional[Point2D] = None
+    right_index_pip: Optional[Point2D] = None
+    right_index_dip: Optional[Point2D] = None
 
 
 @dataclass

@@ -10,10 +10,11 @@ PC接続のWebカメラで上半身の姿勢を推定し、頭上に縦長の長
 
 ### スコープ
 - 入力: Webカメラ映像（RGB）
-- 検出: 上半身ランドマーク（鼻/両肩）＋顔ランドマーク（頭頂部・顎先）
+- 検出: 上半身ランドマーク（鼻/両肩/両肘/両手首/両人差し指 MCP/PIP/DIP/TIP）＋顔ランドマーク（頭頂部・顎先）
+  - 人差し指は MediaPipe Hands を併用して MCP/PIP/DIP/TIP を推定（未検出時はPoseのTIPにフォールバック）
 - 表示: 頭上に縦長の長方形（回転・スケール、アルファ合成）
 - ルール: 角度ダイナミクスに基づく安定判定、一定時間クリア
-- UI: タイマー、難易度、ステータス（Ready/Countdown/Playing/Fail/Clear）、カウントダウン表示、頭頂部と顎先の点＋直線、頭頂部を通る直交ガイドライン（顔幅程度）
+- UI: タイマー、難易度、ステータス（Ready/Countdown/Playing/Fail/Clear）、カウントダウン表示、頭頂部と顎先の点＋直線、頭頂部を通る直交ガイドライン（顔幅程度）、肩/肘/手首/指先の点と腕ライン描画、人差し指の各関節点（MCP/PIP/DIP/TIP）と接続線
 
 ### 想定環境
 - OS: macOS 14+（darwin 24.6.0）、Windows 10/11、Ubuntu 22.04 以降を想定
@@ -53,7 +54,7 @@ PC接続のWebカメラで上半身の姿勢を推定し、頭上に縦長の長
 
 ### システム構成とデータフロー
 1. Camera: Webカメラからフレーム取得
-2. PoseDetector: MediaPipeでランドマーク抽出（Pose＋FaceMesh、フォールバック無し）
+2. PoseDetector: MediaPipeでランドマーク抽出（Pose＋FaceMesh＋Hands、フォールバック無し）
 3. GameLogic: 難易度・状態管理、カウントダウン、安定判定、スコア・タイマー更新
 4. OverlayRenderer: 長方形の回転・スケール・アルファ合成
 5. UI: テキスト/カウントダウン描画
@@ -76,6 +77,10 @@ class Keypoints2D:
     right_wrist: Optional[Point2D]
     left_shoulder: Optional[Point2D]
     right_shoulder: Optional[Point2D]
+    left_elbow: Optional[Point2D]
+    right_elbow: Optional[Point2D]
+    left_index: Optional[Point2D]
+    right_index: Optional[Point2D]
     head_top: Optional[Point2D]   # FaceMesh由来（近似）
     chin: Optional[Point2D]       # FaceMesh由来
 
