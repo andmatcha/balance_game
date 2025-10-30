@@ -85,34 +85,38 @@ def main():
         # 頭上の位置は矩形サイズに依存させる（鼻から矩形高さの約60%上）
         head_center = None
 
-        # 長方形の描画（頭上）
+        # 長方形の描画（頭上）: ゲーム開始後（PLAYING）のみ表示
         from .utils.drawing import draw_rotated_rect
 
-        if det.keypoints.head_top is not None or det.keypoints.nose is not None:
-            rect_w = max(10, int(base_width * 0.22))
-            rect_h = max(20, int(base_width * 1.2))
-            obj_angle = (
-                metrics.object_tilt_deg if hasattr(metrics, "object_tilt_deg") else 0.0
-            )
-            if det.keypoints.head_top is not None:
-                # 頭頂部の水平線の“上”（矩形高さの半分だけ上）に配置
-                head_center = Point2D(
-                    det.keypoints.head_top.x, det.keypoints.head_top.y - rect_h * 0.5
+        if logic.runtime.status == GameStatus.PLAYING:
+            if det.keypoints.head_top is not None or det.keypoints.nose is not None:
+                rect_w = max(10, int(base_width * 0.22))
+                rect_h = max(20, int(base_width * 1.2))
+                obj_angle = (
+                    metrics.object_tilt_deg
+                    if hasattr(metrics, "object_tilt_deg")
+                    else 0.0
                 )
-            else:
-                # フォールバック: 鼻基準
-                head_center = Point2D(
-                    det.keypoints.nose.x, det.keypoints.nose.y - rect_h * 0.6  # type: ignore
+                if det.keypoints.head_top is not None:
+                    # 頭頂部の水平線の“上”（矩形高さの半分だけ上）に配置
+                    head_center = Point2D(
+                        det.keypoints.head_top.x,
+                        det.keypoints.head_top.y - rect_h * 0.5,
+                    )
+                else:
+                    # フォールバック: 鼻基準
+                    head_center = Point2D(
+                        det.keypoints.nose.x, det.keypoints.nose.y - rect_h * 0.6  # type: ignore
+                    )
+                draw_rotated_rect(
+                    frame,
+                    _int_point(head_center),
+                    rect_w,
+                    rect_h,
+                    angle_deg + obj_angle,
+                    color=(0, 200, 255),
+                    alpha=0.85,
                 )
-            draw_rotated_rect(
-                frame,
-                _int_point(head_center),
-                rect_w,
-                rect_h,
-                angle_deg + obj_angle,
-                color=(0, 200, 255),
-                alpha=0.85,
-            )
 
         # 頭頂部・顎先の点と直線
         if det.keypoints.head_top is not None and det.keypoints.chin is not None:
