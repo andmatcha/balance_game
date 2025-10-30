@@ -16,7 +16,7 @@ from .pose_detector import PoseDetector
 from .types import GameStatus, Point2D
 from .utils.geometry import distance, midpoint, shoulder_angle_deg
 from .utils.timing import FrameTimer
-from .ui import draw_hud, draw_title, draw_result
+from .ui import draw_hud, draw_title, draw_result, draw_prepare
 
 
 def _int_point(p: Point2D) -> tuple[int, int]:
@@ -32,6 +32,7 @@ def _draw_debug_points(
 
 class Screen(Enum):
     TITLE = auto()
+    PREPARE = auto()
     COUNTDOWN = auto()
     PLAYING = auto()
     RESULT = auto()
@@ -52,6 +53,7 @@ def main():
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
     screen = Screen.TITLE
+    prepare_ok_frames = 0
 
     while True:
         frame = cam.read()
@@ -204,9 +206,18 @@ def main():
         _draw_index("left", (0, 200, 0))
         _draw_index("right", (0, 0, 200))
 
-        # HUD / タイトル / リザルト描画
+        # 検出の有無（PREPARE 用）
+        has_head = det.keypoints.head_top is not None or det.keypoints.nose is not None
+        has_finger = (
+            det.keypoints.left_index is not None
+            or det.keypoints.right_index is not None
+        )
+
+        # HUD / タイトル / PREPARE / リザルト描画
         if screen == Screen.TITLE:
             draw_title(frame, difficulty=cfg.difficulty)
+        elif screen == Screen.PREPARE:
+            draw_prepare(frame, has_head=has_head, has_finger=has_finger)
         elif screen == Screen.RESULT:
             draw_result(
                 frame,
@@ -232,6 +243,15 @@ def main():
             )
 
         # スクリーン遷移（GameStatus と同期）
+        if screen == Screen.PREPARE:
+            if has_head and has_finger:
+                prepare_ok_frames += 1
+            else:
+                prepare_ok_frames = 0
+            if prepare_ok_frames >= 9:
+                logic.start_countdown(3.0)
+                screen = Screen.COUNTDOWN
+                prepare_ok_frames = 0
         if screen == Screen.COUNTDOWN and logic.runtime.status == GameStatus.PLAYING:
             screen = Screen.PLAYING
         if screen == Screen.PLAYING and logic.runtime.status in (
@@ -258,8 +278,7 @@ def main():
             if screen == Screen.TITLE:
                 physics = RectanglePhysics(cfg.stabilizer)
                 logic = GameLogic(cfg)
-                logic.start_countdown(3.0)
-                screen = Screen.COUNTDOWN
+                screen = Screen.PREPARE
             elif screen == Screen.RESULT:
                 physics = RectanglePhysics(cfg.stabilizer)
                 logic = GameLogic(cfg)
