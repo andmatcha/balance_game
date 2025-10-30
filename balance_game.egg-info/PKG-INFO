@@ -7,5 +7,6 @@ Description-Content-Type: text/markdown
 Requires-Dist: numpy==1.26.4
 Requires-Dist: opencv-python==4.10.0.84
 Requires-Dist: mediapipe>=0.10
+Requires-Dist: pymunk>=7.1.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8; extra == "dev"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from enum import Enum, auto
 
 import cv2
 import numpy as np
@@ -15,6 +16,7 @@ from .pose_detector import PoseDetector
 from .types import GameStatus, Point2D
 from .utils.geometry import distance, midpoint, shoulder_angle_deg
 from .utils.timing import FrameTimer
+from .ui import draw_hud, draw_title, draw_result
 
 
 def _int_point(p: Point2D) -> tuple[int, int]:
@@ -28,12 +30,19 @@ def _draw_debug_points(
         cv2.circle(frame, pt, 5, color, -1)
 
 
+class Screen(Enum):
+    TITLE = auto()
+    COUNTDOWN = auto()
+    PLAYING = auto()
+    RESULT = auto()
+
+
 def main():
     cfg = default_game_config(difficulty="normal", target_fps=30)
     logic = GameLogic(cfg)
     physics = RectanglePhysics(cfg.stabilizer)
 
-    cam = Camera(index=1)
+    cam = Camera(index=0)
     detector = PoseDetector(mirrored=True)
     timer = FrameTimer()
 
@@ -41,6 +50,8 @@ def main():
 
     window_name = "Balance Game"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+
+    screen = Screen.TITLE
 
     while True:
         frame = cam.read()
@@ -193,22 +204,41 @@ def main():
         _draw_index("left", (0, 200, 0))
         _draw_index("right", (0, 0, 200))
 
-        # HUD
-        from .ui import draw_hud
+        # HUD / タイトル / リザルト描画
+        if screen == Screen.TITLE:
+            draw_title(frame, difficulty=cfg.difficulty)
+        elif screen == Screen.RESULT:
+            draw_result(
+                frame,
+                cleared=(logic.runtime.status == GameStatus.CLEAR),
+                elapsed_s=logic.runtime.elapsed_time_s,
+                stable_s=logic.runtime.stable_time_s,
+            )
+        else:
+            draw_hud(
+                frame,
+                status=logic.runtime.status,
+                difficulty=cfg.difficulty,
+                elapsed_s=logic.runtime.elapsed_time_s,
+                stable_s=logic.runtime.stable_time_s,
+                fps=timer.fps(),
+                tilt_deg=(
+                    metrics.object_tilt_deg
+                    if hasattr(metrics, "object_tilt_deg")
+                    else 0.0
+                ),
+                head_vx=(metrics.head_vx if hasattr(metrics, "head_vx") else 0.0),
+                countdown_s=logic.runtime.countdown_remaining_s,
+            )
 
-        draw_hud(
-            frame,
-            status=logic.runtime.status,
-            difficulty=cfg.difficulty,
-            elapsed_s=logic.runtime.elapsed_time_s,
-            stable_s=logic.runtime.stable_time_s,
-            fps=timer.fps(),
-            tilt_deg=(
-                metrics.object_tilt_deg if hasattr(metrics, "object_tilt_deg") else 0.0
-            ),
-            head_vx=(metrics.head_vx if hasattr(metrics, "head_vx") else 0.0),
-            countdown_s=logic.runtime.countdown_remaining_s,
-        )
+        # スクリーン遷移（GameStatus と同期）
+        if screen == Screen.COUNTDOWN and logic.runtime.status == GameStatus.PLAYING:
+            screen = Screen.PLAYING
+        if screen == Screen.PLAYING and logic.runtime.status in (
+            GameStatus.CLEAR,
+            GameStatus.FAIL,
+        ):
+            screen = Screen.RESULT
 
         cv2.imshow(window_name, frame)
 
@@ -218,9 +248,22 @@ def main():
         elif key == ord("r"):
             physics = RectanglePhysics(cfg.stabilizer)
             logic = GameLogic(cfg)
+            screen = Screen.TITLE
         elif key == ord("s"):
             # 3秒カウントダウン開始
             logic.start_countdown(3.0)
+            screen = Screen.COUNTDOWN
+        elif key == ord(" "):
+            # スペースキー: Titleで開始、Resultでタイトルに戻る
+            if screen == Screen.TITLE:
+                physics = RectanglePhysics(cfg.stabilizer)
+                logic = GameLogic(cfg)
+                logic.start_countdown(3.0)
+                screen = Screen.COUNTDOWN
+            elif screen == Screen.RESULT:
+                physics = RectanglePhysics(cfg.stabilizer)
+                logic = GameLogic(cfg)
+                screen = Screen.TITLE
         elif key in (ord("1"), ord("2"), ord("3")):
             if key == ord("1"):
                 cfg.difficulty = "easy"
