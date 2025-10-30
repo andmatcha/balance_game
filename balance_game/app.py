@@ -43,7 +43,7 @@ def main():
     logic = GameLogic(cfg)
     physics = RectanglePhysics(cfg.stabilizer)
 
-    cam = Camera(index=0)
+    cam = Camera(index=1)
     detector = PoseDetector(mirrored=True)
     timer = FrameTimer()
 
@@ -210,18 +210,17 @@ def main():
         _draw_index("left", (0, 200, 0))
         _draw_index("right", (0, 0, 200))
 
-        # 検出の有無（PREPARE 用）
+        # 検出の有無（PREPARE/COUNTDOWN のゲート用）
         has_head = det.keypoints.head_top is not None or det.keypoints.nose is not None
-        has_finger = (
-            det.keypoints.left_index is not None
-            or det.keypoints.right_index is not None
-        )
+        has_left_finger = det.keypoints.left_index is not None
+        has_right_finger = det.keypoints.right_index is not None
+        has_both_fingers = has_left_finger and has_right_finger
 
         # HUD / タイトル / PREPARE / リザルト描画
         if screen == Screen.TITLE:
             draw_title(frame, difficulty=cfg.difficulty)
         elif screen == Screen.PREPARE:
-            draw_prepare(frame, has_head=has_head, has_finger=has_finger)
+            draw_prepare(frame, has_head=has_head, has_finger=has_both_fingers)
         elif screen == Screen.RESULT:
             draw_result(
                 frame,
@@ -248,7 +247,7 @@ def main():
 
         # スクリーン遷移（GameStatus と同期）
         if screen == Screen.PREPARE:
-            if has_head and has_finger:
+            if has_head and has_both_fingers:
                 prepare_ok_frames += 1
             else:
                 prepare_ok_frames = 0
@@ -256,8 +255,14 @@ def main():
                 logic.start_countdown(3.0)
                 screen = Screen.COUNTDOWN
                 prepare_ok_frames = 0
-        if screen == Screen.COUNTDOWN and logic.runtime.status == GameStatus.PLAYING:
-            screen = Screen.PLAYING
+        if screen == Screen.COUNTDOWN:
+            if not (has_head and has_both_fingers):
+                # 検出が外れたらカウントダウンを中止し PREPARE に戻す
+                logic.reset()
+                screen = Screen.PREPARE
+                prepare_ok_frames = 0
+            elif logic.runtime.status == GameStatus.PLAYING:
+                screen = Screen.PLAYING
         if screen == Screen.PLAYING and logic.runtime.status in (
             GameStatus.CLEAR,
             GameStatus.FAIL,
