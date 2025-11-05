@@ -26,24 +26,6 @@ def draw_text_with_bg(
     )
 
 
-def draw_rotated_rect(
-    frame: np.ndarray,
-    center: tuple[int, int],
-    width: int,
-    height: int,
-    angle_deg: float,
-    color: tuple[int, int, int] = (0, 200, 255),
-    alpha: float = 0.9,
-):
-    cx, cy = center
-    rect = ((float(cx), float(cy)), (float(width), float(height)), float(angle_deg))
-    box = cv2.boxPoints(rect)
-    box = np.int32(box)
-    overlay = frame.copy()
-    cv2.fillPoly(overlay, [box], color)
-    cv2.addWeighted(overlay, alpha, frame, 1.0 - alpha, 0, frame)
-
-
 def draw_countdown_center(
     frame: np.ndarray,
     seconds_remaining: float,

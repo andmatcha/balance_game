@@ -1,149 +1,364 @@
-from __future__ import annotations
+import math
+from types import SimpleNamespace
+from typing import Optional
 
-from dataclasses import dataclass, field
-from typing import Dict, Optional
+import cv2
+import numpy as np
+import pymunk
 
-from .types import Keypoints2D, Point2D, StabilizerConfig
-from .utils.geometry import vertical_tilt_deg
-
-
-@dataclass
-class MotionState:
-    prev_nose: Optional[Point2D] = None
-    prev_speed: float = 0.0
+from .types import Keypoints2D, StabilizerConfig
 
 
-@dataclass
-class BalanceMetrics:
-    tilt_deg: float = 0.0
-    jerk: float = 0.0
+class FingerTip:
+    """指先に追従する当たり判定用の円（ボール）。
 
-
-class BalancePhysics:
-    def __init__(self, config: StabilizerConfig):
-        self.config = config
-        self.motion = MotionState()
-
-    def _compute_tilt(self, kps: Keypoints2D) -> float:
-        # 頭頂部→顎先ベクトルの縦方向からの傾き（肩を使わない）
-        if kps.head_top and kps.chin:
-            return float(vertical_tilt_deg(kps.head_top, kps.chin))
-        # フォールバック: 鼻がある場合は頭頂部→鼻
-        if kps.head_top and kps.nose:
-            return float(vertical_tilt_deg(kps.head_top, kps.nose))
-        return 0.0
-
-    def _compute_speed(self, a: Point2D, b: Point2D, dt_s: float) -> float:
-        if dt_s <= 0:
-            return 0.0
-        dx = a.x - b.x
-        dy = a.y - b.y
-        dist = (dx * dx + dy * dy) ** 0.5
-        return dist / dt_s
-
-    def update(
-        self, keypoints: Keypoints2D, dt_s: float
-    ) -> tuple[bool, BalanceMetrics]:
-        metrics = BalanceMetrics()
-
-        # 傾き
-        metrics.tilt_deg = self._compute_tilt(keypoints)
-
-        # ジャーク（速度の変化量）: 鼻のみで近似
-        if keypoints.nose and self.motion.prev_nose is not None:
-            speed = self._compute_speed(keypoints.nose, self.motion.prev_nose, dt_s)
-            metrics.jerk = abs(speed - self.motion.prev_speed) / max(dt_s, 1e-6)
-            self.motion.prev_speed = speed
-        else:
-            metrics.jerk = 1e6  # 検出不可時は大きな値にして不安定扱い
-            self.motion.prev_speed = 0.0
-
-        self.motion.prev_nose = keypoints.nose
-
-        is_stable = (
-            metrics.tilt_deg <= self.config.max_tilt_deg
-            and metrics.jerk <= self.config.max_jerk
-        )
-        return is_stable, metrics
-
-
-# ------------------------------
-# 長方形物体の回転ダイナミクス
-# ------------------------------
-
-
-@dataclass
-class RectMotionState:
-    prev_nose: Optional[Point2D] = None
-    prev_vx: float = 0.0
-    theta_rad: float = 0.0
-    omega: float = 0.0
-
-
-@dataclass
-class RectBalanceMetrics:
-    object_tilt_deg: float = 0.0
-    head_tilt_deg: float = 0.0
-    head_vx: float = 0.0  # px/s
-
-
-class RectanglePhysics:
-    """頭上の長方形の簡易回転剛体モデル。
-
-    dω/dt = k_tilt * rad(φ) + k_move * (vx / s_norm) - c_damp * ω
-    dθ/dt = ω
-    安定: abs(deg(θ)) <= config.max_tilt_deg
+    - 中心は引数で渡される指先座標(x,y)
+    - 重力などの物理影響は受けず、毎回座標を直接更新
+    - 必要に応じて space に追加すれば他形状との当たり判定に利用可能
     """
 
-    def __init__(self, config: StabilizerConfig):
-        self.config = config
-        self.state = RectMotionState()
-        # チューニング係数（経験的）
-        self.k_tilt = 3.0  # 頭傾きからのトルク寄与
-        self.k_move = 1.5  # 水平速度からのトルク寄与
-        self.s_norm = 200.0  # 速度正規化（px/s）
-        self.c_damp = 1.2  # 減衰係数
-
-    def reset(self):
-        self.state = RectMotionState()
-
-    def _head_tilt(self, kps: Keypoints2D) -> float:
-        if kps.head_top and kps.chin:
-            return float(vertical_tilt_deg(kps.head_top, kps.chin))
-        if kps.head_top and kps.nose:
-            return float(vertical_tilt_deg(kps.head_top, kps.nose))
-        return 0.0
-
-    def _nose_vx(self, kps: Keypoints2D, dt_s: float) -> float:
-        if not kps.nose or dt_s <= 0:
-            return 0.0
-        vx = 0.0
-        if self.state.prev_nose is not None:
-            vx = (kps.nose.x - self.state.prev_nose.x) / dt_s
-        self.state.prev_nose = kps.nose
-        return vx
+    def __init__(
+        self, space: Optional[pymunk.Space] = None, radius: float = 18.0
+    ) -> None:
+        self.radius = float(radius)
+        # 物理影響を受けず手動で動かすため KINEMATIC を使用
+        self.body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+        self.shape = pymunk.Circle(self.body, self.radius)
+        # 必要に応じて基本的な摩擦/反発を設定（将来の当たり判定用）
+        self.shape.friction = 0.9
+        self.shape.elasticity = 0.2
+        self._space = space
+        self._last_pos: Optional[tuple[float, float]] = None
+        if self._space is not None:
+            self._space.add(self.body, self.shape)
 
     def update(
-        self, keypoints: Keypoints2D, dt_s: float
-    ) -> tuple[bool, RectBalanceMetrics]:
-        metrics = RectBalanceMetrics()
+        self, x: float, y: float, dt: Optional[float] = None
+    ) -> tuple[float, float]:
+        """中心座標を指先(x,y)に更新して返す。dt があれば速度も設定。"""
+        nx, ny = float(x), float(y)
+        if dt is not None and dt > 0 and self._last_pos is not None:
+            lx, ly = self._last_pos
+            vx = (nx - lx) / dt
+            vy = (ny - ly) / dt
+            self.body.velocity = (float(vx), float(vy))
+        else:
+            self.body.velocity = (0.0, 0.0)
+        self.body.position = (nx, ny)
+        self._last_pos = (nx, ny)
+        return nx, ny
 
-        head_tilt_deg = self._head_tilt(keypoints)
-        vx = self._nose_vx(keypoints, dt_s)
+    def draw(
+        self,
+        frame_bgr,
+        fill_color: tuple[int, int, int] = (0, 120, 255),
+        border_color: tuple[int, int, int] = (0, 0, 0),
+        border_thickness: int = 2,
+    ) -> None:
+        """デバッグ用に現在の円を画面上へ重ね描画する。"""
+        cx, cy = int(self.body.position.x), int(self.body.position.y)
+        r = int(self.radius)
+        cv2.circle(frame_bgr, (cx, cy), r, fill_color, -1)
+        if border_thickness > 0:
+            cv2.circle(
+                frame_bgr, (cx, cy), r, border_color, border_thickness, cv2.LINE_AA
+            )
 
-        metrics.head_tilt_deg = head_tilt_deg
-        metrics.head_vx = vx
 
-        # 角加速度
-        alpha = (
-            self.k_tilt * (head_tilt_deg * 3.1415926535 / 180.0)
-            + self.k_move * (vx / self.s_norm)
-            - self.c_damp * self.state.omega
+class FingerBalancePhysics:
+    """指先の上で横長長方形をバランスさせる最小実装。
+
+    - 指先円は KINEMATIC として毎フレーム座標を更新
+    - 横長長方形（Dynamic）はゲーム開始時に指先の直上へ配置
+    - 長方形の下端が指先より下に抜けたらゲームオーバー
+    """
+
+    def __init__(self, stabilizer: StabilizerConfig):
+        self._stabilizer = stabilizer
+
+        # 物理空間（画面座標系に合わせて +Y を下向きとする想定）
+        self.space = pymunk.Space()
+        self.space.gravity = (0.0, 1200.0)
+        self.space.iterations = 30
+        self._screen_h: Optional[int] = None
+        self._screen_w: Optional[int] = None
+
+        # 指先当たり判定（左右に1つずつ）
+        self.left_finger = FingerTip(space=self.space, radius=12.0)
+        self.right_finger = FingerTip(space=self.space, radius=12.0)
+
+        # 横長長方形の寸法（長辺×3）
+        self.rect_half_w = 180.0  # 幅 360px 相当
+        self.rect_half_h = 10.0  # 高さ 20px 相当
+
+        # 左右の長方形
+        self.left_rect_body: Optional[pymunk.Body] = None
+        self.left_rect_shape: Optional[pymunk.Poly] = None
+        self.right_rect_body: Optional[pymunk.Body] = None
+        self.right_rect_shape: Optional[pymunk.Poly] = None
+
+        # ゲーム開始フラグ（両手が揃ったら同時にスポーン）
+        self._spawned = False
+        self._left_seen = False
+        self._right_seen = False
+        self._unstable_time_s: float = 0.0
+
+    # ---- lifecycle ----
+    def reset(self) -> None:
+        if self.left_rect_body is not None and self.left_rect_shape is not None:
+            try:
+                self.space.remove(self.left_rect_body, self.left_rect_shape)
+            except Exception:
+                pass
+        if self.right_rect_body is not None and self.right_rect_shape is not None:
+            try:
+                self.space.remove(self.right_rect_body, self.right_rect_shape)
+            except Exception:
+                pass
+        self.left_rect_body = None
+        self.left_rect_shape = None
+        self.right_rect_body = None
+        self.right_rect_shape = None
+        self._spawned = False
+        self._left_seen = False
+        self._right_seen = False
+        self._unstable_time_s = 0.0
+
+    # ---- core ----
+    def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
+        # 指先直上に重心が来るよう配置（side: "left"|"right"）
+        mass = 6.0
+        size = (self.rect_half_w * 2.0, self.rect_half_h * 2.0)
+        moment = pymunk.moment_for_box(mass, size)
+        body = pymunk.Body(mass, moment)
+        body.angle = 0.0
+        # ゲーム開始時の指xに合わせ、画面上端（の少し外）から落下開始
+        body.position = (
+            float(fx),
+            -self.rect_half_h - 1.0,
         )
-        # 積分
-        self.state.omega += alpha * dt_s
-        self.state.theta_rad += self.state.omega * dt_s
 
-        metrics.object_tilt_deg = self.state.theta_rad * 180.0 / 3.1415926535
-        is_stable = abs(metrics.object_tilt_deg) <= self.config.max_tilt_deg
+        shape = pymunk.Poly.create_box(body, size)
+        shape.friction = 0.9
+        shape.elasticity = 0.0
+
+        self.space.add(body, shape)
+        if side == "left":
+            self.left_rect_body = body
+            self.left_rect_shape = shape
+        else:
+            self.right_rect_body = body
+            self.right_rect_shape = shape
+
+    # ---- helpers (判定ロジックのカプセル化) ----
+    def _aabb(self, body: pymunk.Body) -> tuple[float, float, float, float]:
+        x = float(body.position.x)
+        y = float(body.position.y)
+        a = float(body.angle)
+        ca, sa = math.cos(a), math.sin(a)
+        hw, hh = self.rect_half_w, self.rect_half_h
+        corners = [
+            (+hw, +hh),
+            (-hw, +hh),
+            (-hw, -hh),
+            (+hw, -hh),
+        ]
+        xs: list[float] = []
+        ys: list[float] = []
+        for px, py in corners:
+            rx = x + (px * ca - py * sa)
+            ry = y + (px * sa + py * ca)
+            xs.append(rx)
+            ys.append(ry)
+        return min(xs), max(xs), min(ys), max(ys)
+
+    def _is_visible(self, body: Optional[pymunk.Body]) -> bool:
+        if body is None or self._screen_w is None or self._screen_h is None:
+            return True
+        min_x, max_x, min_y, max_y = self._aabb(body)
+        return (
+            (max_x >= 0.0)
+            and (min_x < float(self._screen_w))
+            and (max_y >= 0.0)
+            and (min_y < float(self._screen_h))
+        )
+
+    def _is_off_finger_horizontally(
+        self, body: Optional[pymunk.Body], finger_x: float, finger_radius: float
+    ) -> bool:
+        if body is None:
+            return False
+        min_x, max_x, _, _ = self._aabb(body)
+        left_band = finger_x - finger_radius
+        right_band = finger_x + finger_radius
+        return (max_x < left_band) or (min_x > right_band)
+
+    def _is_entirely_below_finger(
+        self, body: Optional[pymunk.Body], finger_y: float, finger_radius: float
+    ) -> bool:
+        if body is None:
+            return False
+        _, _, min_y, _ = self._aabb(body)
+        return min_y > (finger_y + finger_radius + 4.0)
+
+    def _evaluate_unstable_conditions(self) -> bool:
+        # スポーン前や画面サイズ未設定時は不安定扱いしない
+        if not self._spawned or self._screen_w is None or self._screen_h is None:
+            return False
+
+        unstable = False
+
+        # 左
+        if self.left_rect_body is not None:
+            if self._is_visible(self.left_rect_body):
+                self._left_seen = True
+            elif self._left_seen:
+                unstable = True
+            lfx = float(self.left_finger.body.position.x)
+            lfy = float(self.left_finger.body.position.y)
+            lfr = float(self.left_finger.radius)
+            if self._is_off_finger_horizontally(self.left_rect_body, lfx, lfr):
+                unstable = True
+            if self._is_entirely_below_finger(self.left_rect_body, lfy, lfr):
+                unstable = True
+
+        # 右
+        if self.right_rect_body is not None:
+            if self._is_visible(self.right_rect_body):
+                self._right_seen = True
+            elif self._right_seen:
+                unstable = True
+            rfx = float(self.right_finger.body.position.x)
+            rfy = float(self.right_finger.body.position.y)
+            rfr = float(self.right_finger.radius)
+            if self._is_off_finger_horizontally(self.right_rect_body, rfx, rfr):
+                unstable = True
+            if self._is_entirely_below_finger(self.right_rect_body, rfy, rfr):
+                unstable = True
+
+        return unstable
+
+    def update(
+        self,
+        keypoints: Keypoints2D,
+        dt_s: float,
+        frame_h: Optional[int] = None,
+        frame_w: Optional[int] = None,
+    ) -> tuple[bool, object]:
+        if frame_h is not None:
+            self._screen_h = int(frame_h)
+        if frame_w is not None:
+            self._screen_w = int(frame_w)
+        # 時間刻み（クランプ）
+        dt = max(
+            1.0 / 240.0,
+            min(1.0 / 30.0, float(dt_s) if dt_s and dt_s > 0 else 1.0 / 60.0),
+        )
+
+        # 指先座標を更新（左右）
+        lkp = keypoints.left_index
+        rkp = keypoints.right_index
+        if lkp is not None:
+            self.left_finger.update(float(lkp.x), float(lkp.y), dt)
+        if rkp is not None:
+            self.right_finger.update(float(rkp.x), float(rkp.y), dt)
+
+        # スポーンしていなければ、左右が揃った時点で左右それぞれ生成
+        if not self._spawned and (lkp is not None and rkp is not None):
+            self._spawn_rect("left", float(lkp.x), float(lkp.y))
+            self._spawn_rect("right", float(rkp.x), float(rkp.y))
+            self._spawned = True
+
+        # 物理ステップをサブステップ化してトンネリングを軽減
+        max_substep = 1.0 / 240.0
+        sub_steps = max(1, int(math.ceil(dt / max_substep)))
+        sub_dt = dt / sub_steps
+        for _ in range(sub_steps):
+            self.space.step(sub_dt)
+
+        # 状態判定（どちらか一方でもNG条件）を算出 → 0.5秒継続でゲームオーバー
+        unstable_now = self._evaluate_unstable_conditions()
+
+        # 連続不安定時間の更新（実時間 dt_s を使用）
+        real_dt = float(dt_s) if dt_s and float(dt_s) > 0 else 0.0
+        if unstable_now:
+            self._unstable_time_s += real_dt
+        else:
+            self._unstable_time_s = 0.0
+
+        is_stable = self._unstable_time_s < 0.5
+
+        # HUD 用の最小メトリクス
+        # HUD 向け：2つの傾きの平均（存在するものだけ）
+        tilts: list[float] = []
+        if self.left_rect_body is not None:
+            tilts.append(math.degrees(float(self.left_rect_body.angle)))
+        if self.right_rect_body is not None:
+            tilts.append(math.degrees(float(self.right_rect_body.angle)))
+        tilt_deg = sum(tilts) / len(tilts) if tilts else 0.0
+        metrics = SimpleNamespace(object_tilt_deg=tilt_deg)
         return is_stable, metrics
+
+    # ---- drawing ----
+    def draw(self, frame_bgr) -> None:
+        # 指先円の描画（左右）
+        lcx, lcy = int(self.left_finger.body.position.x), int(
+            self.left_finger.body.position.y
+        )
+        rcx, rcy = int(self.right_finger.body.position.x), int(
+            self.right_finger.body.position.y
+        )
+        cv2.circle(
+            frame_bgr, (lcx, lcy), int(self.left_finger.radius), (0, 120, 255), -1
+        )
+        cv2.circle(
+            frame_bgr,
+            (lcx, lcy),
+            int(self.left_finger.radius),
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.circle(
+            frame_bgr, (rcx, rcy), int(self.right_finger.radius), (0, 120, 255), -1
+        )
+        cv2.circle(
+            frame_bgr,
+            (rcx, rcy),
+            int(self.right_finger.radius),
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+        def _draw_rect(body: pymunk.Body) -> None:
+            x = float(body.position.x)
+            y = float(body.position.y)
+            a = float(body.angle)
+            ca, sa = math.cos(a), math.sin(a)
+            hw, hh = self.rect_half_w, self.rect_half_h
+            corners = [
+                (+hw, +hh),
+                (-hw, +hh),
+                (-hw, -hh),
+                (+hw, -hh),
+            ]
+            pts = []
+            for px, py in corners:
+                rx = x + (px * ca - py * sa)
+                ry = y + (px * sa + py * ca)
+                pts.append((int(rx), int(ry)))
+            cv2.fillPoly(frame_bgr, [np.array(pts, dtype=np.int32)], (0, 200, 255))
+            cv2.polylines(
+                frame_bgr,
+                [np.array(pts, dtype=np.int32)],
+                True,
+                (0, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
+
+        if self.left_rect_body is not None:
+            _draw_rect(self.left_rect_body)
+        if self.right_rect_body is not None:
+            _draw_rect(self.right_rect_body)
