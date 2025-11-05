@@ -125,7 +125,7 @@ class FingerBalancePhysics:
     # ---- core ----
     def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
         # 指先直上に重心が来るよう配置（side: "left"|"right"）
-        mass = 2.0
+        mass = 6.0
         size = (self.rect_half_w * 2.0, self.rect_half_h * 2.0)
         moment = pymunk.moment_for_box(mass, size)
         body = pymunk.Body(mass, moment)
