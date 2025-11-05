@@ -76,8 +76,8 @@ class FingerBalancePhysics:
         self.left_finger = FingerTip(space=self.space, radius=12.0)
         self.right_finger = FingerTip(space=self.space, radius=12.0)
 
-        # 横長長方形の寸法
-        self.rect_half_w = 60.0  # 幅 120px 相当
+        # 横長長方形の寸法（長辺×3）
+        self.rect_half_w = 180.0  # 幅 360px 相当
         self.rect_half_h = 10.0  # 高さ 20px 相当
 
         # 左右の長方形
