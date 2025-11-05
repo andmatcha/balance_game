@@ -28,16 +28,25 @@ class FingerTip:
         self.shape.friction = 0.9
         self.shape.elasticity = 0.2
         self._space = space
+        self._last_pos: Optional[tuple[float, float]] = None
         if self._space is not None:
             self._space.add(self.body, self.shape)
 
-    def update(self, x: float, y: float) -> tuple[float, float]:
-        """中心座標を指先(x,y)に更新して返す。"""
-        self.body.position = (float(x), float(y))
-        # 明示的に速度をゼロにして“追従のみ”にする
-        self.body.velocity = (0.0, 0.0)
-        pos = self.body.position
-        return float(pos.x), float(pos.y)
+    def update(
+        self, x: float, y: float, dt: Optional[float] = None
+    ) -> tuple[float, float]:
+        """中心座標を指先(x,y)に更新して返す。dt があれば速度も設定。"""
+        nx, ny = float(x), float(y)
+        if dt is not None and dt > 0 and self._last_pos is not None:
+            lx, ly = self._last_pos
+            vx = (nx - lx) / dt
+            vy = (ny - ly) / dt
+            self.body.velocity = (float(vx), float(vy))
+        else:
+            self.body.velocity = (0.0, 0.0)
+        self.body.position = (nx, ny)
+        self._last_pos = (nx, ny)
+        return nx, ny
 
     def draw(
         self,
@@ -70,6 +79,7 @@ class FingerBalancePhysics:
         # 物理空間（画面座標系に合わせて +Y を下向きとする想定）
         self.space = pymunk.Space()
         self.space.gravity = (0.0, 900.0)
+        self.space.iterations = 30
         self._screen_h: Optional[int] = None
 
         # 指先当たり判定（左右に1つずつ）
@@ -138,13 +148,19 @@ class FingerBalancePhysics:
     ) -> tuple[bool, object]:
         if frame_h is not None:
             self._screen_h = int(frame_h)
+        # 時間刻み（クランプ）
+        dt = max(
+            1.0 / 240.0,
+            min(1.0 / 30.0, float(dt_s) if dt_s and dt_s > 0 else 1.0 / 60.0),
+        )
+
         # 指先座標を更新（左右）
         lkp = keypoints.left_index
         rkp = keypoints.right_index
         if lkp is not None:
-            self.left_finger.update(float(lkp.x), float(lkp.y))
+            self.left_finger.update(float(lkp.x), float(lkp.y), dt)
         if rkp is not None:
-            self.right_finger.update(float(rkp.x), float(rkp.y))
+            self.right_finger.update(float(rkp.x), float(rkp.y), dt)
 
         # スポーンしていなければ、左右が揃った時点で左右それぞれ生成
         if not self._spawned and (lkp is not None and rkp is not None):
@@ -152,12 +168,12 @@ class FingerBalancePhysics:
             self._spawn_rect("right", float(rkp.x), float(rkp.y))
             self._spawned = True
 
-        # 物理ステップ（極端な dt はクランプ）
-        dt = max(
-            1.0 / 240.0,
-            min(1.0 / 30.0, float(dt_s) if dt_s and dt_s > 0 else 1.0 / 60.0),
-        )
-        self.space.step(dt)
+        # 物理ステップをサブステップ化してトンネリングを軽減
+        max_substep = 1.0 / 240.0
+        sub_steps = max(1, int(math.ceil(dt / max_substep)))
+        sub_dt = dt / sub_steps
+        for _ in range(sub_steps):
+            self.space.step(sub_dt)
 
         # 状態判定（どちらか一方でも画面下端に到達でNG）
         is_stable = True
