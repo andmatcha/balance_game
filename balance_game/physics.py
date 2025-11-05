@@ -70,6 +70,7 @@ class FingerBalancePhysics:
         # 物理空間（画面座標系に合わせて +Y を下向きとする想定）
         self.space = pymunk.Space()
         self.space.gravity = (0.0, 900.0)
+        self._screen_h: Optional[int] = None
 
         # 指先当たり判定（左右に1つずつ）
         self.left_finger = FingerTip(space=self.space, radius=12.0)
@@ -134,7 +135,11 @@ class FingerBalancePhysics:
             self.right_rect_body = body
             self.right_rect_shape = shape
 
-    def update(self, keypoints: Keypoints2D, dt_s: float) -> tuple[bool, object]:
+    def update(
+        self, keypoints: Keypoints2D, dt_s: float, frame_h: Optional[int] = None
+    ) -> tuple[bool, object]:
+        if frame_h is not None:
+            self._screen_h = int(frame_h)
         # 指先座標を更新（左右）
         lkp = keypoints.left_index
         rkp = keypoints.right_index
@@ -156,35 +161,28 @@ class FingerBalancePhysics:
         )
         self.space.step(dt)
 
-        # 状態判定（どちらか一方でも落下でNG）
+        # 状態判定（どちらか一方でも画面下端に到達でNG）
         is_stable = True
-        if not self._spawned:
-            is_stable = False
+        # 画面高さが未設定なら判定しない（安定扱い）
+        if self._screen_h is None:
+            is_stable = True
         else:
-            # 左判定
-            if self.left_rect_body is None or keypoints.left_index is None:
-                is_stable = False
-            else:
-                left_bottom = float(self.left_rect_body.position.y) + self.rect_half_h
-                left_threshold = (
-                    float(self.left_finger.body.position.y)
-                    + self.left_finger.radius
-                    + 6.0
-                )
-                if left_bottom > left_threshold:
-                    is_stable = False
-            # 右判定（左で既にNGでも、簡潔に両方チェック）
-            if self.right_rect_body is None or keypoints.right_index is None:
-                is_stable = False
-            else:
-                right_bottom = float(self.right_rect_body.position.y) + self.rect_half_h
-                right_threshold = (
-                    float(self.right_finger.body.position.y)
-                    + self.right_finger.radius
-                    + 6.0
-                )
-                if right_bottom > right_threshold:
-                    is_stable = False
+            # スポーン前は安定扱い（PLAYING への遷移はアプリ側で両手を保証）
+            if self._spawned:
+                # 左
+                if self.left_rect_body is not None:
+                    left_bottom = (
+                        float(self.left_rect_body.position.y) + self.rect_half_h
+                    )
+                    if left_bottom >= float(self._screen_h):
+                        is_stable = False
+                # 右（左で既にNGでも両方見るが結論は同じ）
+                if self.right_rect_body is not None:
+                    right_bottom = (
+                        float(self.right_rect_body.position.y) + self.rect_half_h
+                    )
+                    if right_bottom >= float(self._screen_h):
+                        is_stable = False
 
         # HUD 用の最小メトリクス
         # HUD 向け：2つの傾きの平均（存在するものだけ）

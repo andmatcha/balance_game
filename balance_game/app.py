@@ -51,7 +51,7 @@ def main():
         if logic.runtime.status != GameStatus.PLAYING:
             physics.reset()
         # 物理更新（指先は内部で追従）
-        is_stable, metrics = physics.update(det.keypoints, dt_s)
+        is_stable, metrics = physics.update(det.keypoints, dt_s, frame.shape[0])
         logic.update(is_stable, dt_s)
 
         # 物理オブジェクトの描画（指先・長方形）
@@ -59,15 +59,15 @@ def main():
         # 人差し指の骨格描画は簡略化のため省略
 
         # 検出の有無（PREPARE/COUNTDOWN のゲート用）
-        has_any_finger = (det.keypoints.left_index is not None) or (
-            det.keypoints.right_index is not None
-        )
+        has_left_finger = det.keypoints.left_index is not None
+        has_right_finger = det.keypoints.right_index is not None
+        has_both_fingers = has_left_finger and has_right_finger
 
         # HUD / タイトル / PREPARE / リザルト描画
         if screen == Screen.TITLE:
             draw_title(frame, difficulty=cfg.difficulty)
         elif screen == Screen.PREPARE:
-            draw_prepare(frame, has_head=False, has_finger=has_any_finger)
+            draw_prepare(frame, has_head=False, has_finger=has_both_fingers)
         elif screen == Screen.RESULT:
             draw_result(
                 frame,
@@ -94,7 +94,7 @@ def main():
 
         # スクリーン遷移（GameStatus と同期）
         if screen == Screen.PREPARE:
-            if has_any_finger:
+            if has_both_fingers:
                 prepare_ok_frames += 1
             else:
                 prepare_ok_frames = 0
@@ -103,7 +103,7 @@ def main():
                 screen = Screen.COUNTDOWN
                 prepare_ok_frames = 0
         if screen == Screen.COUNTDOWN:
-            if not has_any_finger:
+            if not has_both_fingers:
                 # 検出が外れたらカウントダウンを中止し PREPARE に戻す
                 logic.reset()
                 screen = Screen.PREPARE
