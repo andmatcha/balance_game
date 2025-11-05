@@ -115,12 +115,10 @@ class FingerBalancePhysics:
         moment = pymunk.moment_for_box(mass, size)
         body = pymunk.Body(mass, moment)
         body.angle = 0.0
-        finger_radius = (
-            self.left_finger.radius if side == "left" else self.right_finger.radius
-        )
+        # ゲーム開始時の指xに合わせ、画面上端（の少し外）から落下開始
         body.position = (
             float(fx),
-            float(fy) - finger_radius - self.rect_half_h - 1.0,
+            -self.rect_half_h - 1.0,
         )
 
         shape = pymunk.Poly.create_box(body, size)
