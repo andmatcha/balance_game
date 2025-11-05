@@ -51,7 +51,9 @@ def main():
         if logic.runtime.status != GameStatus.PLAYING:
             physics.reset()
         # 物理更新（指先は内部で追従）
-        is_stable, metrics = physics.update(det.keypoints, dt_s, frame.shape[0])
+        is_stable, metrics = physics.update(
+            det.keypoints, dt_s, frame.shape[0], frame.shape[1]
+        )
         logic.update(is_stable, dt_s)
 
         # 物理オブジェクトの描画（指先・長方形）

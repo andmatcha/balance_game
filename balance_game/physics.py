@@ -81,6 +81,7 @@ class FingerBalancePhysics:
         self.space.gravity = (0.0, 1200.0)
         self.space.iterations = 30
         self._screen_h: Optional[int] = None
+        self._screen_w: Optional[int] = None
 
         # 指先当たり判定（左右に1つずつ）
         self.left_finger = FingerTip(space=self.space, radius=12.0)
@@ -98,6 +99,8 @@ class FingerBalancePhysics:
 
         # ゲーム開始フラグ（両手が揃ったら同時にスポーン）
         self._spawned = False
+        self._left_seen = False
+        self._right_seen = False
 
     # ---- lifecycle ----
     def reset(self) -> None:
@@ -116,6 +119,8 @@ class FingerBalancePhysics:
         self.right_rect_body = None
         self.right_rect_shape = None
         self._spawned = False
+        self._left_seen = False
+        self._right_seen = False
 
     # ---- core ----
     def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
@@ -144,10 +149,16 @@ class FingerBalancePhysics:
             self.right_rect_shape = shape
 
     def update(
-        self, keypoints: Keypoints2D, dt_s: float, frame_h: Optional[int] = None
+        self,
+        keypoints: Keypoints2D,
+        dt_s: float,
+        frame_h: Optional[int] = None,
+        frame_w: Optional[int] = None,
     ) -> tuple[bool, object]:
         if frame_h is not None:
             self._screen_h = int(frame_h)
+        if frame_w is not None:
+            self._screen_w = int(frame_w)
         # 時間刻み（クランプ）
         dt = max(
             1.0 / 240.0,
@@ -175,28 +186,54 @@ class FingerBalancePhysics:
         for _ in range(sub_steps):
             self.space.step(sub_dt)
 
-        # 状態判定（どちらか一方でも画面下端に到達でNG）
+        # 状態判定（どちらか一方でも画面から完全に見えなくなったらNG）
         is_stable = True
-        # 画面高さが未設定なら判定しない（安定扱い）
-        if self._screen_h is None:
+        if self._screen_h is None or self._screen_w is None:
             is_stable = True
-        else:
-            # スポーン前は安定扱い（PLAYING への遷移はアプリ側で両手を保証）
-            if self._spawned:
-                # 左
-                if self.left_rect_body is not None:
-                    left_bottom = (
-                        float(self.left_rect_body.position.y) + self.rect_half_h
-                    )
-                    if left_bottom >= float(self._screen_h):
-                        is_stable = False
-                # 右（左で既にNGでも両方見るが結論は同じ）
-                if self.right_rect_body is not None:
-                    right_bottom = (
-                        float(self.right_rect_body.position.y) + self.rect_half_h
-                    )
-                    if right_bottom >= float(self._screen_h):
-                        is_stable = False
+        elif self._spawned:
+
+            def _visible(body: pymunk.Body) -> bool:
+                x = float(body.position.x)
+                y = float(body.position.y)
+                a = float(body.angle)
+                ca, sa = math.cos(a), math.sin(a)
+                hw, hh = self.rect_half_w, self.rect_half_h
+                corners = [
+                    (+hw, +hh),
+                    (-hw, +hh),
+                    (-hw, -hh),
+                    (+hw, -hh),
+                ]
+                xs: list[float] = []
+                ys: list[float] = []
+                for px, py in corners:
+                    rx = x + (px * ca - py * sa)
+                    ry = y + (px * sa + py * ca)
+                    xs.append(rx)
+                    ys.append(ry)
+                min_x, max_x = min(xs), max(xs)
+                min_y, max_y = min(ys), max(ys)
+                return (
+                    (max_x >= 0.0)
+                    and (min_x < float(self._screen_w))
+                    and (max_y >= 0.0)
+                    and (min_y < float(self._screen_h))
+                )
+
+            # 左の可視・不可視判定（いったん見えた後に不可視でNG）
+            if self.left_rect_body is not None:
+                left_vis = _visible(self.left_rect_body)
+                if left_vis:
+                    self._left_seen = True
+                elif self._left_seen:
+                    is_stable = False
+            # 右
+            if self.right_rect_body is not None:
+                right_vis = _visible(self.right_rect_body)
+                if right_vis:
+                    self._right_seen = True
+                elif self._right_seen:
+                    is_stable = False
 
         # HUD 用の最小メトリクス
         # HUD 向け：2つの傾きの平均（存在するものだけ）
