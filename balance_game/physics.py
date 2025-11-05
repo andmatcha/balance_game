@@ -71,41 +71,55 @@ class FingerBalancePhysics:
         self.space = pymunk.Space()
         self.space.gravity = (0.0, 900.0)
 
-        # 指先当たり判定（小さめ）
-        self.finger = FingerTip(space=self.space, radius=12.0)
+        # 指先当たり判定（左右に1つずつ）
+        self.left_finger = FingerTip(space=self.space, radius=12.0)
+        self.right_finger = FingerTip(space=self.space, radius=12.0)
 
         # 横長長方形の寸法
         self.rect_half_w = 60.0  # 幅 120px 相当
         self.rect_half_h = 10.0  # 高さ 20px 相当
 
-        self.rect_body: Optional[pymunk.Body] = None
-        self.rect_shape: Optional[pymunk.Poly] = None
+        # 左右の長方形
+        self.left_rect_body: Optional[pymunk.Body] = None
+        self.left_rect_shape: Optional[pymunk.Poly] = None
+        self.right_rect_body: Optional[pymunk.Body] = None
+        self.right_rect_shape: Optional[pymunk.Poly] = None
 
-        # ゲーム開始フラグ（初回に指先が取得できたらスポーン）
+        # ゲーム開始フラグ（両手が揃ったら同時にスポーン）
         self._spawned = False
 
     # ---- lifecycle ----
     def reset(self) -> None:
-        if self.rect_body is not None and self.rect_shape is not None:
+        if self.left_rect_body is not None and self.left_rect_shape is not None:
             try:
-                self.space.remove(self.rect_body, self.rect_shape)
+                self.space.remove(self.left_rect_body, self.left_rect_shape)
             except Exception:
                 pass
-        self.rect_body = None
-        self.rect_shape = None
+        if self.right_rect_body is not None and self.right_rect_shape is not None:
+            try:
+                self.space.remove(self.right_rect_body, self.right_rect_shape)
+            except Exception:
+                pass
+        self.left_rect_body = None
+        self.left_rect_shape = None
+        self.right_rect_body = None
+        self.right_rect_shape = None
         self._spawned = False
 
     # ---- core ----
-    def _spawn_rect(self, fx: float, fy: float) -> None:
-        # 指先直上に重心が来るよう配置
+    def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
+        # 指先直上に重心が来るよう配置（side: "left"|"right"）
         mass = 2.0
         size = (self.rect_half_w * 2.0, self.rect_half_h * 2.0)
         moment = pymunk.moment_for_box(mass, size)
         body = pymunk.Body(mass, moment)
         body.angle = 0.0
+        finger_radius = (
+            self.left_finger.radius if side == "left" else self.right_finger.radius
+        )
         body.position = (
             float(fx),
-            float(fy) - self.finger.radius - self.rect_half_h - 1.0,
+            float(fy) - finger_radius - self.rect_half_h - 1.0,
         )
 
         shape = pymunk.Poly.create_box(body, size)
@@ -113,19 +127,27 @@ class FingerBalancePhysics:
         shape.elasticity = 0.0
 
         self.space.add(body, shape)
-        self.rect_body = body
-        self.rect_shape = shape
-        self._spawned = True
+        if side == "left":
+            self.left_rect_body = body
+            self.left_rect_shape = shape
+        else:
+            self.right_rect_body = body
+            self.right_rect_shape = shape
 
     def update(self, keypoints: Keypoints2D, dt_s: float) -> tuple[bool, object]:
-        # 指先座標：右優先、なければ左
-        finger = keypoints.right_index or keypoints.left_index
-        if finger is not None:
-            self.finger.update(float(finger.x), float(finger.y))
+        # 指先座標を更新（左右）
+        lkp = keypoints.left_index
+        rkp = keypoints.right_index
+        if lkp is not None:
+            self.left_finger.update(float(lkp.x), float(lkp.y))
+        if rkp is not None:
+            self.right_finger.update(float(rkp.x), float(rkp.y))
 
-        # スポーンしていなければ、初回に指先が取れた時点で生成
-        if not self._spawned and finger is not None:
-            self._spawn_rect(float(finger.x), float(finger.y))
+        # スポーンしていなければ、左右が揃った時点で左右それぞれ生成
+        if not self._spawned and (lkp is not None and rkp is not None):
+            self._spawn_rect("left", float(lkp.x), float(lkp.y))
+            self._spawn_rect("right", float(rkp.x), float(rkp.y))
+            self._spawned = True
 
         # 物理ステップ（極端な dt はクランプ）
         dt = max(
@@ -134,54 +156,107 @@ class FingerBalancePhysics:
         )
         self.space.step(dt)
 
-        # 状態判定
+        # 状態判定（どちらか一方でも落下でNG）
         is_stable = True
-        if self.rect_body is None:
+        if not self._spawned:
             is_stable = False
         else:
-            # 長方形の下端が指先より下に抜けたら「落下」
-            rect_cy = float(self.rect_body.position.y)
-            bottom_y = rect_cy + self.rect_half_h
-            finger_y = float(self.finger.body.position.y)
-            fell = bottom_y > (finger_y + self.finger.radius + 6.0)
-            is_stable = not fell
+            # 左判定
+            if self.left_rect_body is None or keypoints.left_index is None:
+                is_stable = False
+            else:
+                left_bottom = float(self.left_rect_body.position.y) + self.rect_half_h
+                left_threshold = (
+                    float(self.left_finger.body.position.y)
+                    + self.left_finger.radius
+                    + 6.0
+                )
+                if left_bottom > left_threshold:
+                    is_stable = False
+            # 右判定（左で既にNGでも、簡潔に両方チェック）
+            if self.right_rect_body is None or keypoints.right_index is None:
+                is_stable = False
+            else:
+                right_bottom = float(self.right_rect_body.position.y) + self.rect_half_h
+                right_threshold = (
+                    float(self.right_finger.body.position.y)
+                    + self.right_finger.radius
+                    + 6.0
+                )
+                if right_bottom > right_threshold:
+                    is_stable = False
 
         # HUD 用の最小メトリクス
-        tilt_deg = 0.0
-        if self.rect_body is not None:
-            tilt_deg = math.degrees(float(self.rect_body.angle))
+        # HUD 向け：2つの傾きの平均（存在するものだけ）
+        tilts: list[float] = []
+        if self.left_rect_body is not None:
+            tilts.append(math.degrees(float(self.left_rect_body.angle)))
+        if self.right_rect_body is not None:
+            tilts.append(math.degrees(float(self.right_rect_body.angle)))
+        tilt_deg = sum(tilts) / len(tilts) if tilts else 0.0
         metrics = SimpleNamespace(object_tilt_deg=tilt_deg)
         return is_stable, metrics
 
     # ---- drawing ----
     def draw(self, frame_bgr) -> None:
-        # 指先円の描画（デバッグ）
-        cx, cy = int(self.finger.body.position.x), int(self.finger.body.position.y)
-        cv2.circle(frame_bgr, (cx, cy), int(self.finger.radius), (0, 120, 255), -1)
+        # 指先円の描画（左右）
+        lcx, lcy = int(self.left_finger.body.position.x), int(
+            self.left_finger.body.position.y
+        )
+        rcx, rcy = int(self.right_finger.body.position.x), int(
+            self.right_finger.body.position.y
+        )
         cv2.circle(
-            frame_bgr, (cx, cy), int(self.finger.radius), (0, 0, 0), 2, cv2.LINE_AA
+            frame_bgr, (lcx, lcy), int(self.left_finger.radius), (0, 120, 255), -1
+        )
+        cv2.circle(
+            frame_bgr,
+            (lcx, lcy),
+            int(self.left_finger.radius),
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.circle(
+            frame_bgr, (rcx, rcy), int(self.right_finger.radius), (0, 120, 255), -1
+        )
+        cv2.circle(
+            frame_bgr,
+            (rcx, rcy),
+            int(self.right_finger.radius),
+            (0, 0, 0),
+            2,
+            cv2.LINE_AA,
         )
 
-        if self.rect_body is None:
-            return
-        # 長方形の4頂点を算出して描画
-        x = float(self.rect_body.position.x)
-        y = float(self.rect_body.position.y)
-        a = float(self.rect_body.angle)
-        ca, sa = math.cos(a), math.sin(a)
-        hw, hh = self.rect_half_w, self.rect_half_h
-        corners = [
-            (+hw, +hh),
-            (-hw, +hh),
-            (-hw, -hh),
-            (+hw, -hh),
-        ]
-        pts = []
-        for px, py in corners:
-            rx = x + (px * ca - py * sa)
-            ry = y + (px * sa + py * ca)
-            pts.append((int(rx), int(ry)))
-        cv2.fillPoly(frame_bgr, [np.array(pts, dtype=np.int32)], (0, 200, 255))
-        cv2.polylines(
-            frame_bgr, [np.array(pts, dtype=np.int32)], True, (0, 0, 0), 2, cv2.LINE_AA
-        )
+        def _draw_rect(body: pymunk.Body) -> None:
+            x = float(body.position.x)
+            y = float(body.position.y)
+            a = float(body.angle)
+            ca, sa = math.cos(a), math.sin(a)
+            hw, hh = self.rect_half_w, self.rect_half_h
+            corners = [
+                (+hw, +hh),
+                (-hw, +hh),
+                (-hw, -hh),
+                (+hw, -hh),
+            ]
+            pts = []
+            for px, py in corners:
+                rx = x + (px * ca - py * sa)
+                ry = y + (px * sa + py * ca)
+                pts.append((int(rx), int(ry)))
+            cv2.fillPoly(frame_bgr, [np.array(pts, dtype=np.int32)], (0, 200, 255))
+            cv2.polylines(
+                frame_bgr,
+                [np.array(pts, dtype=np.int32)],
+                True,
+                (0, 0, 0),
+                2,
+                cv2.LINE_AA,
+            )
+
+        if self.left_rect_body is not None:
+            _draw_rect(self.left_rect_body)
+        if self.right_rect_body is not None:
+            _draw_rect(self.right_rect_body)
