@@ -78,7 +78,7 @@ class FingerBalancePhysics:
 
         # 物理空間（画面座標系に合わせて +Y を下向きとする想定）
         self.space = pymunk.Space()
-        self.space.gravity = (0.0, 900.0)
+        self.space.gravity = (0.0, 1200.0)
         self.space.iterations = 30
         self._screen_h: Optional[int] = None
 
