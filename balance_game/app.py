@@ -8,15 +8,11 @@ import cv2
 from .camera import Camera
 from .config import DIFFICULTY_PRESETS, default_game_config
 from .game_logic import GameLogic
-from .physics import RectanglePhysics
 from .pose_detector import PoseDetector
-from .types import GameStatus, Point2D
+from .physics import FingerBalancePhysics
+from .types import GameStatus
 from .utils.timing import FrameTimer
 from .ui import draw_hud, draw_title, draw_result, draw_prepare
-
-
-def _int_point(p: Point2D) -> tuple[int, int]:
-    return int(p.x), int(p.y)
 
 
 class Screen(Enum):
@@ -30,7 +26,7 @@ class Screen(Enum):
 def main():
     cfg = default_game_config(difficulty="normal", target_fps=30)
     logic = GameLogic(cfg)
-    physics = RectanglePhysics(cfg.stabilizer)
+    physics = FingerBalancePhysics(cfg.stabilizer)
 
     cam = Camera(index=1)
     detector = PoseDetector(mirrored=True)
@@ -51,117 +47,27 @@ def main():
 
         dt_s = timer.tick()
         det = detector.detect(frame)
+        # PLAYING までは常にリセットして開始時にスポーンさせる
+        if logic.runtime.status != GameStatus.PLAYING:
+            physics.reset()
+        # 物理更新（指先は内部で追従）
         is_stable, metrics = physics.update(det.keypoints, dt_s)
         logic.update(is_stable, dt_s)
 
-        # オーバーレイの角度（肩なしのため 0 ベース）
-        angle_deg = 0.0
-
-        # オーバーレイのスケール（顔幅ベース）。フォールバックは120
-        base_width = 120
-        if "face_bbox" in det.metadata:
-            x1, y1, x2, y2 = det.metadata["face_bbox"]  # type: ignore
-            face_w = max(10, int(x2 - x1))
-            base_width = int(max(60, min(240, face_w)))
-
-        # 頭上の位置は矩形サイズに依存させる（鼻から矩形高さの約60%上）
-        head_center = None
-
-        # 長方形の描画（頭上）: ゲーム開始後（PLAYING）のみ表示
-        from .utils.drawing import draw_rotated_rect
-
-        if logic.runtime.status == GameStatus.PLAYING:
-            if det.keypoints.head_top is not None or det.keypoints.nose is not None:
-                rect_w = max(10, int(base_width * 0.22))
-                rect_h = max(20, int(base_width * 1.2))
-                obj_angle = (
-                    metrics.object_tilt_deg
-                    if hasattr(metrics, "object_tilt_deg")
-                    else 0.0
-                )
-                if det.keypoints.head_top is not None:
-                    # 頭頂部の水平線の“上”（矩形高さの半分だけ上）に配置
-                    head_center = Point2D(
-                        det.keypoints.head_top.x,
-                        det.keypoints.head_top.y - rect_h * 0.5,
-                    )
-                else:
-                    # フォールバック: 鼻基準
-                    head_center = Point2D(
-                        det.keypoints.nose.x, det.keypoints.nose.y - rect_h * 0.6  # type: ignore
-                    )
-                draw_rotated_rect(
-                    frame,
-                    _int_point(head_center),
-                    rect_w,
-                    rect_h,
-                    angle_deg + obj_angle,
-                    color=(0, 200, 255),
-                    alpha=0.85,
-                )
-
-        # 頭頂部・顎先の点と直線
-        if det.keypoints.head_top is not None and det.keypoints.chin is not None:
-            ht = _int_point(det.keypoints.head_top)
-            ch = _int_point(det.keypoints.chin)
-            cv2.circle(frame, ht, 5, (0, 255, 0), -1)
-            cv2.circle(frame, ch, 5, (0, 0, 255), -1)
-            cv2.line(frame, ht, ch, (255, 255, 0), 2, cv2.LINE_AA)
-            # 直交ガイドライン（長さ=顔幅程度）
-            vx = float(ch[0] - ht[0])
-            vy = float(ch[1] - ht[1])
-            norm = (vx * vx + vy * vy) ** 0.5
-            if norm > 1e-6:
-                nx = -vy / norm
-                ny = vx / norm
-                face_w = float(base_width)
-                if "face_bbox" in det.metadata:
-                    x1, y1, x2, y2 = det.metadata["face_bbox"]  # type: ignore
-                    face_w = max(10.0, float(x2 - x1))
-                half = int(face_w * 0.5)
-                p1 = (int(ht[0] + nx * half), int(ht[1] + ny * half))
-                p2 = (int(ht[0] - nx * half), int(ht[1] - ny * half))
-                cv2.line(frame, p1, p2, (255, 0, 255), 2, cv2.LINE_AA)
-
-        # 人差し指各関節（MCP/PIP/DIP/TIP）
-        def _draw_index(side: str, color: tuple[int, int, int]):
-            if side == "left":
-                mcp = det.keypoints.left_index_mcp
-                pip = det.keypoints.left_index_pip
-                dip = det.keypoints.left_index_dip
-                tip = det.keypoints.left_index
-            else:
-                mcp = det.keypoints.right_index_mcp
-                pip = det.keypoints.right_index_pip
-                dip = det.keypoints.right_index_dip
-                tip = det.keypoints.right_index
-            pts = []
-            for p in [mcp, pip, dip, tip]:
-                pts.append(_int_point(p) if p is not None else None)
-            # 点
-            for pt in pts:
-                if pt is not None:
-                    cv2.circle(frame, pt, 3, color, -1)
-            # 線（隣接接続）
-            for i in range(3):
-                a, b = pts[i], pts[i + 1]
-                if a is not None and b is not None:
-                    cv2.line(frame, a, b, color, 2, cv2.LINE_AA)
-
-        _draw_index("left", (0, 200, 0))
-        _draw_index("right", (0, 0, 200))
+        # 物理オブジェクトの描画（指先・長方形）
+        physics.draw(frame)
+        # 人差し指の骨格描画は簡略化のため省略
 
         # 検出の有無（PREPARE/COUNTDOWN のゲート用）
-        has_head = det.keypoints.head_top is not None or det.keypoints.nose is not None
-        has_left_finger = det.keypoints.left_index is not None
-        has_right_finger = det.keypoints.right_index is not None
-        has_both_fingers = has_left_finger and has_right_finger
+        has_any_finger = (det.keypoints.left_index is not None) or (
+            det.keypoints.right_index is not None
+        )
 
         # HUD / タイトル / PREPARE / リザルト描画
         if screen == Screen.TITLE:
             draw_title(frame, difficulty=cfg.difficulty)
         elif screen == Screen.PREPARE:
-            draw_prepare(frame, has_head=has_head, has_finger=has_both_fingers)
+            draw_prepare(frame, has_head=False, has_finger=has_any_finger)
         elif screen == Screen.RESULT:
             draw_result(
                 frame,
@@ -188,7 +94,7 @@ def main():
 
         # スクリーン遷移（GameStatus と同期）
         if screen == Screen.PREPARE:
-            if has_head and has_both_fingers:
+            if has_any_finger:
                 prepare_ok_frames += 1
             else:
                 prepare_ok_frames = 0
@@ -197,7 +103,7 @@ def main():
                 screen = Screen.COUNTDOWN
                 prepare_ok_frames = 0
         if screen == Screen.COUNTDOWN:
-            if not (has_head and has_both_fingers):
+            if not has_any_finger:
                 # 検出が外れたらカウントダウンを中止し PREPARE に戻す
                 logic.reset()
                 screen = Screen.PREPARE
@@ -216,7 +122,7 @@ def main():
         if key == ord("q"):
             break
         elif key == ord("r"):
-            physics = RectanglePhysics(cfg.stabilizer)
+            physics = FingerBalancePhysics(cfg.stabilizer)
             logic = GameLogic(cfg)
             screen = Screen.TITLE
         elif key == ord("s"):
@@ -226,11 +132,11 @@ def main():
         elif key == ord(" "):
             # スペースキー: Titleで開始、Resultでタイトルに戻る
             if screen == Screen.TITLE:
-                physics = RectanglePhysics(cfg.stabilizer)
+                physics = FingerBalancePhysics(cfg.stabilizer)
                 logic = GameLogic(cfg)
                 screen = Screen.PREPARE
             elif screen == Screen.RESULT:
-                physics = RectanglePhysics(cfg.stabilizer)
+                physics = FingerBalancePhysics(cfg.stabilizer)
                 logic = GameLogic(cfg)
                 screen = Screen.TITLE
         elif key in (ord("1"), ord("2"), ord("3")):
@@ -241,7 +147,7 @@ def main():
             elif key == ord("3"):
                 cfg.difficulty = "hard"
             cfg.stabilizer = DIFFICULTY_PRESETS[cfg.difficulty]
-            physics = RectanglePhysics(cfg.stabilizer)
+            physics = FingerBalancePhysics(cfg.stabilizer)
             logic = GameLogic(cfg)
 
     cam.release()
