@@ -93,10 +93,11 @@ PC接続のWebカメラで両手の人差し指先端を検出し、各指先の
 5. UI: HUD/タイトル/準備/リザルトの描画
 6. AppCore: `GameApp`/`ScreenManager` によるループ制御・画面遷移・入力処理
 
-### データモデル（インタフェース草案）
+### データモデル（実装準拠）
 ```python
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from enum import Enum
+from typing import Optional, Dict
 
 @dataclass
 class Point2D:
@@ -105,62 +106,74 @@ class Point2D:
 
 @dataclass
 class Keypoints2D:
-    nose: Optional[Point2D]
-    left_wrist: Optional[Point2D]
-    right_wrist: Optional[Point2D]
-    left_shoulder: Optional[Point2D]
-    right_shoulder: Optional[Point2D]
-    left_elbow: Optional[Point2D]
-    right_elbow: Optional[Point2D]
-    left_index: Optional[Point2D]
-    right_index: Optional[Point2D]
-    head_top: Optional[Point2D]   # FaceMesh由来（近似）
-    chin: Optional[Point2D]       # FaceMesh由来
+    nose: Optional[Point2D] = None
+    head_top: Optional[Point2D] = None
+    chin: Optional[Point2D] = None
+    left_index: Optional[Point2D] = None
+    right_index: Optional[Point2D] = None
+    left_index_mcp: Optional[Point2D] = None
+    left_index_pip: Optional[Point2D] = None
+    left_index_dip: Optional[Point2D] = None
+    right_index_mcp: Optional[Point2D] = None
+    right_index_pip: Optional[Point2D] = None
+    right_index_dip: Optional[Point2D] = None
+
+@dataclass
+class DetectionResult:
+    keypoints: Keypoints2D
+    metadata: Dict[str, object]
 
 @dataclass
 class StabilizerConfig:
-    max_tilt_deg: float      # 許容傾き（小さいほど難しい）
-    max_jerk: float          # 許容ジャーク（px/ms）
-    clear_seconds: float     # クリアに必要な連続安定時間
+    max_tilt_deg: float
+    max_jerk: float
+    clear_seconds: float
+
+class GameStatus(str, Enum):
+    READY = "READY"
+    COUNTDOWN = "COUNTDOWN"
+    PLAYING = "PLAYING"
+    FAIL = "FAIL"
+    CLEAR = "CLEAR"
 
 @dataclass
 class GameConfig:
     target_fps: int
-    difficulty: str          # "easy" | "normal" | "hard"
+    difficulty: str
     stabilizer: StabilizerConfig
 
 class PoseDetector:
-    def detect(self, frame_bgr) -> Tuple[Keypoints2D, dict]:
+    def detect(self, frame_bgr) -> DetectionResult:
         ...
 ```
 
-### ディレクトリ構成（提案）
+### ディレクトリ構成（実装準拠）
 ```text
 balance_game/
   assets/
-    images/           # （任意）将来のPNGアセット用。現仕様は長方形のみ
-    sounds/           # （任意）
+    images/
+    sounds/
   balance_game/
     __init__.py
     app.py            # エントリポイント（GameApp.run を呼び出し）
-    app_core.py       # ループ制御/画面遷移/入力処理（GameApp, ScreenManager, handle_key_input）
-    config.py         # 設定（難易度・しきい値・入出力）
+    app_core.py       # ループ制御/画面遷移/入力（GameApp, ScreenManager, handle_key_input）
     camera.py         # カメラ抽象
-    pose_detector.py  # MediaPipe検出（必須）
-    physics.py        # 指先追従 + 剛体長方形の物理/安定判定（pymunk）
+    config.py         # 難易度プリセット・デフォルト設定
     game_logic.py     # 状態・カウントダウン・スコア・遷移
-    ui.py             # テキスト/カウントダウン描画
+    physics.py        # 指先追従 + 剛体長方形の物理/安定判定（pymunk）
+    pose_detector.py  # MediaPipe 検出（Pose/FaceMesh/Hands）
+    ui.py             # HUD/タイトル/準備/リザルト描画
     types.py          # dataclass/型定義
     utils/
-      geometry.py
-      timing.py
       drawing.py
+      timing.py
   scripts/
-    run.py            # 実行エントリ（例: python -m balance_game.app）
-  tests/
-    test_physics.py
-    test_overlay.py
-  README.md
+    run.py
+  BALANCE_GAME_SPEC.md
+  requirements.txt
+  pyproject.toml
+  uv.lock
+  balance_game/README.md
 ```
 
 既存資産の参照:
