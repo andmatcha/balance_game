@@ -101,6 +101,7 @@ class FingerBalancePhysics:
         self._spawned = False
         self._left_seen = False
         self._right_seen = False
+        self._unstable_time_s: float = 0.0
 
     # ---- lifecycle ----
     def reset(self) -> None:
@@ -121,6 +122,7 @@ class FingerBalancePhysics:
         self._spawned = False
         self._left_seen = False
         self._right_seen = False
+        self._unstable_time_s = 0.0
 
     # ---- core ----
     def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
@@ -186,13 +188,13 @@ class FingerBalancePhysics:
         for _ in range(sub_steps):
             self.space.step(sub_dt)
 
-        # 状態判定（どちらか一方でも画面から完全に見えなくなったらNG）
-        is_stable = True
+        # 状態判定（どちらか一方でもNG条件）を算出 → 0.5秒継続でゲームオーバー
+        unstable_now = False
         if self._screen_h is None or self._screen_w is None:
-            is_stable = True
+            unstable_now = False
         elif self._spawned:
 
-            def _visible(body: pymunk.Body) -> bool:
+            def _aabb(body: pymunk.Body) -> tuple[float, float, float, float]:
                 x = float(body.position.x)
                 y = float(body.position.y)
                 a = float(body.angle)
@@ -213,6 +215,10 @@ class FingerBalancePhysics:
                     ys.append(ry)
                 min_x, max_x = min(xs), max(xs)
                 min_y, max_y = min(ys), max(ys)
+                return min_x, max_x, min_y, max_y
+
+            def _visible(body: pymunk.Body) -> bool:
+                min_x, max_x, min_y, max_y = _aabb(body)
                 return (
                     (max_x >= 0.0)
                     and (min_x < float(self._screen_w))
@@ -220,20 +226,56 @@ class FingerBalancePhysics:
                     and (min_y < float(self._screen_h))
                 )
 
+            def _off_finger_horizontally(
+                body: pymunk.Body, fx: float, fr: float
+            ) -> bool:
+                min_x, max_x, _, _ = _aabb(body)
+                left_band = fx - fr
+                right_band = fx + fr
+                return (max_x < left_band) or (min_x > right_band)
+
+            def _entirely_below_finger(body: pymunk.Body, fy: float, fr: float) -> bool:
+                _, _, min_y, _ = _aabb(body)
+                return min_y > (fy + fr + 4.0)
+
             # 左の可視・不可視判定（いったん見えた後に不可視でNG）
             if self.left_rect_body is not None:
                 left_vis = _visible(self.left_rect_body)
                 if left_vis:
                     self._left_seen = True
                 elif self._left_seen:
-                    is_stable = False
+                    unstable_now = True
+                # 逸脱・落下（指基準）
+                lfx = float(self.left_finger.body.position.x)
+                lfy = float(self.left_finger.body.position.y)
+                lfr = float(self.left_finger.radius)
+                if _off_finger_horizontally(self.left_rect_body, lfx, lfr):
+                    unstable_now = True
+                if _entirely_below_finger(self.left_rect_body, lfy, lfr):
+                    unstable_now = True
             # 右
             if self.right_rect_body is not None:
                 right_vis = _visible(self.right_rect_body)
                 if right_vis:
                     self._right_seen = True
                 elif self._right_seen:
-                    is_stable = False
+                    unstable_now = True
+                rfx = float(self.right_finger.body.position.x)
+                rfy = float(self.right_finger.body.position.y)
+                rfr = float(self.right_finger.radius)
+                if _off_finger_horizontally(self.right_rect_body, rfx, rfr):
+                    unstable_now = True
+                if _entirely_below_finger(self.right_rect_body, rfy, rfr):
+                    unstable_now = True
+
+        # 連続不安定時間の更新（実時間 dt_s を使用）
+        real_dt = float(dt_s) if dt_s and float(dt_s) > 0 else 0.0
+        if unstable_now:
+            self._unstable_time_s += real_dt
+        else:
+            self._unstable_time_s = 0.0
+
+        is_stable = self._unstable_time_s < 0.5
 
         # HUD 用の最小メトリクス
         # HUD 向け：2つの傾きの平均（存在するものだけ）
