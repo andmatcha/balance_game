@@ -150,6 +150,94 @@ class FingerBalancePhysics:
             self.right_rect_body = body
             self.right_rect_shape = shape
 
+    # ---- helpers (判定ロジックのカプセル化) ----
+    def _aabb(self, body: pymunk.Body) -> tuple[float, float, float, float]:
+        x = float(body.position.x)
+        y = float(body.position.y)
+        a = float(body.angle)
+        ca, sa = math.cos(a), math.sin(a)
+        hw, hh = self.rect_half_w, self.rect_half_h
+        corners = [
+            (+hw, +hh),
+            (-hw, +hh),
+            (-hw, -hh),
+            (+hw, -hh),
+        ]
+        xs: list[float] = []
+        ys: list[float] = []
+        for px, py in corners:
+            rx = x + (px * ca - py * sa)
+            ry = y + (px * sa + py * ca)
+            xs.append(rx)
+            ys.append(ry)
+        return min(xs), max(xs), min(ys), max(ys)
+
+    def _is_visible(self, body: Optional[pymunk.Body]) -> bool:
+        if body is None or self._screen_w is None or self._screen_h is None:
+            return True
+        min_x, max_x, min_y, max_y = self._aabb(body)
+        return (
+            (max_x >= 0.0)
+            and (min_x < float(self._screen_w))
+            and (max_y >= 0.0)
+            and (min_y < float(self._screen_h))
+        )
+
+    def _is_off_finger_horizontally(
+        self, body: Optional[pymunk.Body], finger_x: float, finger_radius: float
+    ) -> bool:
+        if body is None:
+            return False
+        min_x, max_x, _, _ = self._aabb(body)
+        left_band = finger_x - finger_radius
+        right_band = finger_x + finger_radius
+        return (max_x < left_band) or (min_x > right_band)
+
+    def _is_entirely_below_finger(
+        self, body: Optional[pymunk.Body], finger_y: float, finger_radius: float
+    ) -> bool:
+        if body is None:
+            return False
+        _, _, min_y, _ = self._aabb(body)
+        return min_y > (finger_y + finger_radius + 4.0)
+
+    def _evaluate_unstable_conditions(self) -> bool:
+        # スポーン前や画面サイズ未設定時は不安定扱いしない
+        if not self._spawned or self._screen_w is None or self._screen_h is None:
+            return False
+
+        unstable = False
+
+        # 左
+        if self.left_rect_body is not None:
+            if self._is_visible(self.left_rect_body):
+                self._left_seen = True
+            elif self._left_seen:
+                unstable = True
+            lfx = float(self.left_finger.body.position.x)
+            lfy = float(self.left_finger.body.position.y)
+            lfr = float(self.left_finger.radius)
+            if self._is_off_finger_horizontally(self.left_rect_body, lfx, lfr):
+                unstable = True
+            if self._is_entirely_below_finger(self.left_rect_body, lfy, lfr):
+                unstable = True
+
+        # 右
+        if self.right_rect_body is not None:
+            if self._is_visible(self.right_rect_body):
+                self._right_seen = True
+            elif self._right_seen:
+                unstable = True
+            rfx = float(self.right_finger.body.position.x)
+            rfy = float(self.right_finger.body.position.y)
+            rfr = float(self.right_finger.radius)
+            if self._is_off_finger_horizontally(self.right_rect_body, rfx, rfr):
+                unstable = True
+            if self._is_entirely_below_finger(self.right_rect_body, rfy, rfr):
+                unstable = True
+
+        return unstable
+
     def update(
         self,
         keypoints: Keypoints2D,
@@ -189,84 +277,7 @@ class FingerBalancePhysics:
             self.space.step(sub_dt)
 
         # 状態判定（どちらか一方でもNG条件）を算出 → 0.5秒継続でゲームオーバー
-        unstable_now = False
-        if self._screen_h is None or self._screen_w is None:
-            unstable_now = False
-        elif self._spawned:
-
-            def _aabb(body: pymunk.Body) -> tuple[float, float, float, float]:
-                x = float(body.position.x)
-                y = float(body.position.y)
-                a = float(body.angle)
-                ca, sa = math.cos(a), math.sin(a)
-                hw, hh = self.rect_half_w, self.rect_half_h
-                corners = [
-                    (+hw, +hh),
-                    (-hw, +hh),
-                    (-hw, -hh),
-                    (+hw, -hh),
-                ]
-                xs: list[float] = []
-                ys: list[float] = []
-                for px, py in corners:
-                    rx = x + (px * ca - py * sa)
-                    ry = y + (px * sa + py * ca)
-                    xs.append(rx)
-                    ys.append(ry)
-                min_x, max_x = min(xs), max(xs)
-                min_y, max_y = min(ys), max(ys)
-                return min_x, max_x, min_y, max_y
-
-            def _visible(body: pymunk.Body) -> bool:
-                min_x, max_x, min_y, max_y = _aabb(body)
-                return (
-                    (max_x >= 0.0)
-                    and (min_x < float(self._screen_w))
-                    and (max_y >= 0.0)
-                    and (min_y < float(self._screen_h))
-                )
-
-            def _off_finger_horizontally(
-                body: pymunk.Body, fx: float, fr: float
-            ) -> bool:
-                min_x, max_x, _, _ = _aabb(body)
-                left_band = fx - fr
-                right_band = fx + fr
-                return (max_x < left_band) or (min_x > right_band)
-
-            def _entirely_below_finger(body: pymunk.Body, fy: float, fr: float) -> bool:
-                _, _, min_y, _ = _aabb(body)
-                return min_y > (fy + fr + 4.0)
-
-            # 左の可視・不可視判定（いったん見えた後に不可視でNG）
-            if self.left_rect_body is not None:
-                left_vis = _visible(self.left_rect_body)
-                if left_vis:
-                    self._left_seen = True
-                elif self._left_seen:
-                    unstable_now = True
-                # 逸脱・落下（指基準）
-                lfx = float(self.left_finger.body.position.x)
-                lfy = float(self.left_finger.body.position.y)
-                lfr = float(self.left_finger.radius)
-                if _off_finger_horizontally(self.left_rect_body, lfx, lfr):
-                    unstable_now = True
-                if _entirely_below_finger(self.left_rect_body, lfy, lfr):
-                    unstable_now = True
-            # 右
-            if self.right_rect_body is not None:
-                right_vis = _visible(self.right_rect_body)
-                if right_vis:
-                    self._right_seen = True
-                elif self._right_seen:
-                    unstable_now = True
-                rfx = float(self.right_finger.body.position.x)
-                rfy = float(self.right_finger.body.position.y)
-                rfr = float(self.right_finger.radius)
-                if _off_finger_horizontally(self.right_rect_body, rfx, rfr):
-                    unstable_now = True
-                if _entirely_below_finger(self.right_rect_body, rfy, rfr):
-                    unstable_now = True
+        unstable_now = self._evaluate_unstable_conditions()
 
         # 連続不安定時間の更新（実時間 dt_s を使用）
         real_dt = float(dt_s) if dt_s and float(dt_s) > 0 else 0.0
