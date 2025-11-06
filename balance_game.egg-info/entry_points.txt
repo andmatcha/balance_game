@@ -1,0 +1,2 @@
+[console_scripts]
+balance-game = balance_game.app:main
