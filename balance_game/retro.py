@@ -47,6 +47,181 @@ def _add_scanlines(img_bgr: np.ndarray, strength: float = 0.25) -> np.ndarray:
     return out
 
 
+def _put_retro_text(
+    img: np.ndarray,
+    text: str,
+    org: tuple[int, int],
+    color_idx: int = 7,
+    font_scale: float = 0.55,
+):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    line = cv2.LINE_8
+    color = tuple(int(c) for c in PYXEL_PALETTE_BGR[color_idx])
+    x, y = org
+    cv2.putText(img, text, (x + 1, y + 1), font, font_scale, (0, 0, 0), 2, line)
+    cv2.putText(img, text, (x, y), font, font_scale, color, 1, line)
+
+
+def render_pyxel_hud(
+    frame_bgr: np.ndarray,
+    status: str,
+    difficulty: str,
+    elapsed_s: float,
+    stable_s: float,
+    fps: float,
+    tilt_deg: float,
+    head_vx: float,
+    countdown_s: float = 0.0,
+):
+    h, w = frame_bgr.shape[:2]
+
+    # パネルサイズ・位置
+    x0, y0 = 12, 12
+    pw = min(440, max(300, int(w * 0.32)))
+    ph = min(210, max(150, int(h * 0.28)))
+
+    bg = tuple(int(c) for c in PYXEL_PALETTE_BGR[1])
+    border_outer = tuple(int(c) for c in PYXEL_PALETTE_BGR[12])
+    border_inner = tuple(int(c) for c in PYXEL_PALETTE_BGR[13])
+
+    panel = np.zeros((ph, pw, 3), dtype=np.uint8)
+    panel[:, :] = bg
+    cv2.rectangle(panel, (0, 0), (pw - 1, ph - 1), border_outer, 4)
+    cv2.rectangle(panel, (8, 8), (pw - 9, ph - 9), border_inner, 2)
+
+    # テキスト
+    y = 28
+    _put_retro_text(panel, "STATUS", (14, y), color_idx=10, font_scale=0.6)
+    y += 24
+    _put_retro_text(panel, f"{status}", (14, y), color_idx=7, font_scale=0.75)
+    y += 24
+    _put_retro_text(panel, f"Difficulty: {difficulty}", (14, y), color_idx=7)
+    y += 22
+    _put_retro_text(
+        panel, f"Elapsed: {elapsed_s:.1f}s  Stable: {stable_s:.1f}s", (14, y)
+    )
+    y += 22
+    _put_retro_text(panel, f"FPS: {fps:.1f}", (14, y))
+    y += 22
+    _put_retro_text(panel, f"Tilt: {tilt_deg:.1f} deg  HeadVx: {head_vx:.1f}", (14, y))
+
+    panel = _add_scanlines(panel, strength=0.12)
+    # 合成
+    y1, x1 = y0 + ph, x0 + pw
+    frame_bgr[y0:y1, x0:x1] = panel
+
+    # 画面下のキーガイド（軽量描画）
+    _put_retro_text(
+        frame_bgr,
+        "[S] Start  [R] Reset  [1/2/3] Difficulty  [Q] Quit",
+        (12, h - 12),
+        color_idx=7,
+    )
+
+
+def render_pyxel_prepare_overlay(
+    frame_bgr: np.ndarray, has_head: bool, has_finger: bool
+):
+    h, w = frame_bgr.shape[:2]
+
+    # パネル
+    pw = int(w * 0.7)
+    ph = int(h * 0.5)
+    panel = np.zeros((ph, pw, 3), dtype=np.uint8)
+    bg = tuple(int(c) for c in PYXEL_PALETTE_BGR[1])
+    border_outer = tuple(int(c) for c in PYXEL_PALETTE_BGR[12])
+    border_inner = tuple(int(c) for c in PYXEL_PALETTE_BGR[13])
+    panel[:, :] = bg
+    cv2.rectangle(panel, (0, 0), (pw - 1, ph - 1), border_outer, 6)
+    cv2.rectangle(panel, (12, 12), (pw - 13, ph - 13), border_inner, 3)
+
+    # 文言
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    title = "Standby: Align for detection"
+    (tw, th), _ = cv2.getTextSize(title, font, 0.8, 2)
+    tx = max(16, (pw - tw) // 2)
+    ty = int(ph * 0.35)
+    cv2.putText(panel, title, (tx + 1, ty + 1), font, 0.8, (0, 0, 0), 3, cv2.LINE_8)
+    cv2.putText(
+        panel,
+        title,
+        (tx, ty),
+        font,
+        0.8,
+        tuple(int(c) for c in PYXEL_PALETTE_BGR[7]),
+        2,
+        cv2.LINE_8,
+    )
+
+    status_head = "OK" if has_head else "--"
+    status_finger = "OK" if has_finger else "--"
+    _put_retro_text(panel, f"Head: {status_head}", (int(pw * 0.12), int(ph * 0.55)))
+    _put_retro_text(
+        panel, f"Index finger: {status_finger}", (int(pw * 0.12), int(ph * 0.62))
+    )
+    _put_retro_text(
+        panel,
+        "Hold position. Countdown starts when both are detected",
+        (int(pw * 0.12), int(ph * 0.70)),
+    )
+
+    panel = _add_scanlines(panel, strength=0.16)
+
+    x0 = (w - pw) // 2
+    y0 = (h - ph) // 2
+    frame_bgr[y0 : y0 + ph, x0 : x0 + pw] = panel
+
+
+def render_pyxel_result_overlay(
+    frame_bgr: np.ndarray,
+    cleared: bool,
+    elapsed_s: float,
+    stable_s: float,
+):
+    h, w = frame_bgr.shape[:2]
+
+    pw = int(w * 0.7)
+    ph = int(h * 0.42)
+    panel = np.zeros((ph, pw, 3), dtype=np.uint8)
+    bg = tuple(int(c) for c in PYXEL_PALETTE_BGR[1])
+    border_outer = tuple(int(c) for c in PYXEL_PALETTE_BGR[12])
+    border_inner = tuple(int(c) for c in PYXEL_PALETTE_BGR[13])
+    panel[:, :] = bg
+    cv2.rectangle(panel, (0, 0), (pw - 1, ph - 1), border_outer, 6)
+    cv2.rectangle(panel, (12, 12), (pw - 13, ph - 13), border_inner, 3)
+
+    title = "GAME CLEAR" if cleared else "GAME OVER"
+    color_idx = 11 if cleared else 8
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (tw, th), _ = cv2.getTextSize(title, font, 1.2, 3)
+    tx = max(16, (pw - tw) // 2)
+    ty = int(ph * 0.42)
+    cv2.putText(panel, title, (tx + 1, ty + 1), font, 1.2, (0, 0, 0), 5, cv2.LINE_8)
+    cv2.putText(
+        panel,
+        title,
+        (tx, ty),
+        font,
+        1.2,
+        tuple(int(c) for c in PYXEL_PALETTE_BGR[color_idx]),
+        3,
+        cv2.LINE_8,
+    )
+
+    _put_retro_text(
+        panel,
+        f"Elapsed: {elapsed_s:.1f}s  Stable: {stable_s:.1f}s",
+        (int(pw * 0.12), int(ph * 0.62)),
+    )
+    _put_retro_text(panel, "[SPACE] Return to Title", (int(pw * 0.12), int(ph * 0.72)))
+
+    panel = _add_scanlines(panel, strength=0.16)
+
+    x0 = (w - pw) // 2
+    y0 = (h - ph) // 2
+    frame_bgr[y0 : y0 + ph, x0 : x0 + pw] = panel
+
+
 def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     """現在のフレーム上に Pyxel 風タイトルパネルをオーバーレイ描画する（破壊的）。
 
