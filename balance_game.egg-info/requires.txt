@@ -1,5 +1,9 @@
 numpy==1.26.4
 opencv-python==4.10.0.84
 mediapipe>=0.10
-pymunk==6.6.0
+pymunk>=7.1.0
+pyxel>=2.5.9
 pygame>=2.5.2
+
+[dev]
+pytest>=8
