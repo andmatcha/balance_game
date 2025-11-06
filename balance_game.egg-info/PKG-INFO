@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: balance-game
+Version: 0.1.0
+Summary: Webカメラで遊べるカメラバランスゲーム
+Requires-Python: <3.10,>=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy==1.26.4
+Requires-Dist: opencv-python==4.10.0.84
+Requires-Dist: mediapipe>=0.10
+Requires-Dist: pymunk>=7.1.0
+Requires-Dist: pyxel>=2.5.9
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"

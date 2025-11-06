@@ -35,6 +35,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pymunk" },
+    { name = "pyxel" },
 ]
 
 [package.optional-dependencies]
@@ -49,6 +50,7 @@ requires-dist = [
     { name = "opencv-python", specifier = "==4.10.0.84" },
     { name = "pymunk", specifier = ">=7.1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pyxel", specifier = ">=2.5.9" },
 ]
 provides-extras = ["dev"]
 
@@ -510,6 +512,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
+name = "pyxel"
+version = "2.5.9"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/b3/8506098f3ac54523c3e1143933dc555c3ae33d7b9b86cb73c0a832f9f3c4/pyxel-2.5.9-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:175e517e205458b69ce8a11553eefe90c0f17c25323124f00d5d4c1b83ca4967", size = 4839688, upload-time = "2025-10-21T14:19:01.597Z" },
+    { url = "https://files.pythonhosted.org/packages/85/30/c82bccd92d4b8396cfd4b258783f22db4f1de55fa921323f073c02716e4b/pyxel-2.5.9-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:2afecb947d44a83714005d0ad2c94af67522b15f92e4ed0374c96942973e54b8", size = 4558271, upload-time = "2025-10-21T14:19:03.7Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/b2/4c84f6a7a3c6af4182e1c7d8a59f0cab019152062a171ac822d51b3de7b6/pyxel-2.5.9-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:11fd42bf4b9d806952d7ee63c931c0bb13fea14d3bc5a209680ebbe0bb37fb40", size = 4283574, upload-time = "2025-10-21T14:19:05.066Z" },
+    { url = "https://files.pythonhosted.org/packages/94/8a/762c334ad8928c1810137c394ecc120fc2232a2185ba12ed6aa2bb7c9c6c/pyxel-2.5.9-cp38-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:9a5b0b9af4c0a39eae12af6d93b81e47023270c94a42f590930f113689034afc", size = 4295235, upload-time = "2025-10-21T14:19:06.545Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/c0/55c71cbaf18264e5086c6072471494e717acaf40b4405ff76ffd5d451748/pyxel-2.5.9-cp38-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:880585bd0aca7eb9ab40499df1d33a93bb23073c35340c5be24467a9c227dd6d", size = 4727465, upload-time = "2025-10-21T14:19:07.721Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/1a/c56c99d6144eea262653716c3d5a766100f205d213ff8c1681d5e22aaf37/pyxel-2.5.9-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7204013f6833e419810c59ba9b1f049766baf0e0e4f3a5b2cd333d136efe5204", size = 4462841, upload-time = "2025-10-21T14:19:08.988Z" },
+    { url = "https://files.pythonhosted.org/packages/18/d6/c4c7cd9a3694a3c9bfcdabef40cd8ecd7048c43052778b07d16d3a184b5f/pyxel-2.5.9-cp38-abi3-win32.whl", hash = "sha256:5ee1a26ee3ea98f4ed7cd110576dba420121ad4169866e0b34c5d0ece705a350", size = 4342371, upload-time = "2025-10-21T14:19:10.237Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/6e/a7c6d6f486e7513f9da2fdb20e8231b501d0e0cd7439c557a215f9545d0c/pyxel-2.5.9-cp38-abi3-win_amd64.whl", hash = "sha256:6375d14388f3fd4e40707d61340d2bc153a5d6eb5c25c7e3de5030a3b8fd4a3f", size = 4516363, upload-time = "2025-10-21T14:19:11.459Z" },
 ]
 
 [[package]]

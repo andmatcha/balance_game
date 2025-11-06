@@ -9,6 +9,7 @@ dependencies = [
     "opencv-python==4.10.0.84",
     "mediapipe>=0.10",
     "pymunk>=7.1.0",
+    "pyxel>=2.5.9",
 ]
 
 [project.scripts]

@@ -5,6 +5,7 @@ import numpy as np
 
 from .types import GameStatus
 from .utils.drawing import draw_text_with_bg, draw_countdown_center
+from .retro import render_pyxel_title_overlay
 
 
 def draw_hud(
@@ -46,47 +47,8 @@ def draw_hud(
 
 
 def draw_title(frame_bgr: np.ndarray, difficulty: str):
-    h, w = frame_bgr.shape[:2]
-    overlay = frame_bgr.copy()
-    cv2.rectangle(
-        overlay,
-        (int(w * 0.08), int(h * 0.2)),
-        (int(w * 0.92), int(h * 0.8)),
-        (0, 0, 0),
-        -1,
-    )
-    cv2.addWeighted(overlay, 0.45, frame_bgr, 0.55, 0, frame_bgr)
-
-    # タイトルとガイド
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    title = "BALANCE GAME"
-    scale = 1.6
-    thickness = 3
-    (tw, th), _ = cv2.getTextSize(title, font, scale, thickness)
-    tx = int((w - tw) / 2)
-    ty = int(h * 0.38)
-    cv2.putText(
-        frame_bgr,
-        title,
-        (tx, ty),
-        font,
-        scale,
-        (255, 255, 255),
-        thickness + 2,
-        cv2.LINE_AA,
-    )
-    cv2.putText(
-        frame_bgr, title, (tx, ty), font, scale, (0, 0, 0), thickness, cv2.LINE_AA
-    )
-
-    draw_text_with_bg(
-        frame_bgr, f"Difficulty: {difficulty}", (int(w * 0.12), int(h * 0.52))
-    )
-    draw_text_with_bg(
-        frame_bgr, "[1/2/3] Change difficulty", (int(w * 0.12), int(h * 0.58))
-    )
-    draw_text_with_bg(frame_bgr, "[SPACE] Start", (int(w * 0.12), int(h * 0.64)))
-    draw_text_with_bg(frame_bgr, "[Q] Quit", (int(w * 0.12), int(h * 0.70)))
+    # Pyxel 風のレトロタイトルを現在フレームに直接オーバーレイ
+    render_pyxel_title_overlay(frame_bgr, difficulty)
 
 
 def draw_result(
