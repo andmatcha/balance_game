@@ -56,16 +56,8 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     """
     h, w = frame_bgr.shape[:2]
 
-    # 背景を暗く（該当領域のみ処理して負荷を削減）
-    dx0, dy0 = int(w * 0.08), int(h * 0.2)
-    dx1, dy1 = int(w * 0.92), int(h * 0.8)
-    roi = frame_bgr[dy0:dy1, dx0:dx1]
-    np.multiply(roi, 0.55, out=roi, casting="unsafe")
-
-    # パネル領域
-    x0, y0 = int(w * 0.1), int(h * 0.24)
-    x1, y1 = int(w * 0.9), int(h * 0.76)
-    pw, ph = x1 - x0, y1 - y0
+    # フルスクリーンのパネル領域（カメラ映像は表示しない）
+    pw, ph = w, h
     panel = np.zeros((ph, pw, 3), dtype=np.uint8)
 
     # 背景色（暗紺）と枠線（サイアン/紫）
@@ -73,8 +65,8 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     border_outer = tuple(int(c) for c in PYXEL_PALETTE_BGR[12])  # (41,173,255)
     border_inner = tuple(int(c) for c in PYXEL_PALETTE_BGR[13])  # (131,118,156)
     panel[:, :] = bg
-    cv2.rectangle(panel, (0, 0), (pw - 1, ph - 1), border_outer, 3)
-    cv2.rectangle(panel, (6, 6), (pw - 7, ph - 7), border_inner, 2)
+    cv2.rectangle(panel, (0, 0), (pw - 1, ph - 1), border_outer, 6)
+    cv2.rectangle(panel, (12, 12), (pw - 13, ph - 13), border_inner, 3)
 
     # タイトル文字（拡大ネアレストでドット感を強調）
     title = "BALANCE GAME"
@@ -100,7 +92,7 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     )
 
     # パネル内に収まる整数スケール（横幅/高さの両方を満たす）
-    max_w = pw - 20
+    max_w = pw - 40
     max_h = int(ph * 0.28)
     scale_w = max(1, max_w // small_w)
     scale_h = max(1, max_h // small_h)
@@ -113,7 +105,7 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     bh, bw = big.shape[:2]
     bx = max(0, (pw - bw) // 2)
     by = int(ph * 0.18) - bh // 2
-    by = max(10, min(ph - bh - 10, by))
+    by = max(20, min(ph - bh - 20, by))
     panel[by : by + bh, bx : bx + bw] = big
 
     # 情報テキスト
@@ -135,5 +127,5 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     # スキャンライン適用（量子化は重い/色破綻につながるため廃止）
     panel_sl = _add_scanlines(panel, strength=0.16)
 
-    # フレームへ合成（アルファ 1.0 = そのまま）
-    frame_bgr[y0:y1, x0:x1] = panel_sl
+    # フレームへ合成（全画面置換）
+    frame_bgr[:, :] = panel_sl
