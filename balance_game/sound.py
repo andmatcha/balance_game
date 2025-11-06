@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 
 import numpy as np
 
@@ -22,28 +22,13 @@ class SoundEffects:
 
     def __init__(self) -> None:
         self._enabled: bool = False
-        self._sr: int = 44100
-        self._select_sound = None
-        self._diff_sound = None
+        self._sample_rate: int = 44100
+        self._select_sound: Optional[Any] = None  # pygame.mixer.Sound | None
+        self._diff_sound: Optional[Any] = None  # pygame.mixer.Sound | None
+
         self._init_mixer()
         if self._enabled:
-            # 軽い UI サウンド（クリック音に近い短いビープ）
-            self._select_sound = self._create_sound(
-                self._concat(
-                    [
-                        self._tone(660.0, 0.06, 0.5),
-                        self._silence(0.01),
-                        self._tone(880.0, 0.07, 0.5),
-                    ]
-                )
-            )
-            self._diff_sound = self._create_sound(
-                self._concat(
-                    [
-                        self._tone(740.0, 0.05, 0.45),
-                    ]
-                )
-            )
+            self._build_sounds()
 
     def _init_mixer(self) -> None:
         if not _PYGAME_AVAILABLE:  # pygame が無い場合は無効化
@@ -52,7 +37,7 @@ class SoundEffects:
         try:
             if not pygame.mixer.get_init():  # type: ignore[attr-defined]
                 pygame.mixer.pre_init(
-                    frequency=self._sr, size=-16, channels=1, buffer=512
+                    frequency=self._sample_rate, size=-16, channels=1, buffer=512
                 )
                 pygame.mixer.init()
                 pygame.mixer.set_num_channels(8)
@@ -61,15 +46,32 @@ class SoundEffects:
             # オーディオデバイスが無い等の理由で初期化に失敗した場合は無効化
             self._enabled = False
 
+    def _build_sounds(self) -> None:
+        """UI で使用する短い効果音を合成して準備する。"""
+        # Select: 短い上昇2音 + 微小な無音
+        select_wave = np.concatenate(
+            [
+                self._tone(660.0, 0.06, 0.5),
+                self._silence(0.01),
+                self._tone(880.0, 0.07, 0.5),
+            ],
+            axis=0,
+        )
+        # Difficulty: 一音の軽いクリック風
+        diff_wave = self._tone(740.0, 0.05, 0.45)
+
+        self._select_sound = self._make_sound(select_wave)
+        self._diff_sound = self._make_sound(diff_wave)
+
     def _tone(
         self, freq_hz: float, duration_s: float, volume: float = 0.5
     ) -> np.ndarray:
-        n_samples = max(1, int(self._sr * duration_s))
+        n_samples = max(1, int(self._sample_rate * duration_s))
         t = np.linspace(0.0, duration_s, n_samples, endpoint=False)
         wave = np.sin(2.0 * np.pi * float(freq_hz) * t).astype(np.float32)
         wave *= float(max(0.0, min(1.0, volume)))
         # クリックノイズ軽減のためフェードイン/アウト
-        fade_len = max(1, int(min(0.01, duration_s * 0.15) * self._sr))
+        fade_len = max(1, int(min(0.01, duration_s * 0.15) * self._sample_rate))
         if fade_len > 0 and wave.size > fade_len * 2:
             fade_in = np.linspace(0.0, 1.0, fade_len, dtype=np.float32)
             fade_out = np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
@@ -80,15 +82,10 @@ class SoundEffects:
         return wave_i16
 
     def _silence(self, duration_s: float) -> np.ndarray:
-        n_samples = max(1, int(self._sr * duration_s))
+        n_samples = max(1, int(self._sample_rate * duration_s))
         return np.zeros(n_samples, dtype=np.int16)
 
-    def _concat(self, parts: list[np.ndarray]) -> np.ndarray:
-        if len(parts) == 1:
-            return parts[0]
-        return np.concatenate(parts, axis=0)
-
-    def _create_sound(self, wave_i16: np.ndarray):  # -> pygame.mixer.Sound | None
+    def _make_sound(self, wave_i16: np.ndarray):  # -> pygame.mixer.Sound | None
         if not self._enabled:
             return None
         try:
