@@ -8,6 +8,7 @@ balance_game/game_logic.py
 balance_game/physics.py
 balance_game/pose_detector.py
 balance_game/retro.py
+balance_game/sound.py
 balance_game/types.py
 balance_game/ui.py
 balance_game.egg-info/PKG-INFO

@@ -14,6 +14,7 @@ from .pose_detector import PoseDetector
 from .types import GameStatus, GameConfig
 from .ui import draw_hud, draw_title, draw_result, draw_prepare
 from .utils.timing import FrameTimer
+from .sound import get_sound_effects
 
 
 class Screen(Enum):
@@ -102,6 +103,7 @@ def handle_key_input(
     cfg = state.cfg
     logic = state.logic
     physics = state.physics
+    sfx = get_sound_effects()
 
     if key == ord("q"):
         quit_game = True
@@ -113,6 +115,7 @@ def handle_key_input(
         logic.start_countdown(3.0)
         sm.screen = Screen.COUNTDOWN
     elif key == ord(" "):
+        sfx.play_select()
         if sm.screen == Screen.TITLE:
             physics = FingerBalancePhysics(cfg.stabilizer)
             logic = GameLogic(cfg)
@@ -131,6 +134,7 @@ def handle_key_input(
         cfg.stabilizer = DIFFICULTY_PRESETS[cfg.difficulty]
         physics = FingerBalancePhysics(cfg.stabilizer)
         logic = GameLogic(cfg)
+        sfx.play_difficulty_change()
 
     return quit_game, AppState(cfg=cfg, logic=logic, physics=physics)
 

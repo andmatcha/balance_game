@@ -9,5 +9,6 @@ Requires-Dist: opencv-python==4.10.0.84
 Requires-Dist: mediapipe>=0.10
 Requires-Dist: pymunk>=7.1.0
 Requires-Dist: pyxel>=2.5.9
+Requires-Dist: pygame>=2.5.2
 Provides-Extra: dev
 Requires-Dist: pytest>=8; extra == "dev"
