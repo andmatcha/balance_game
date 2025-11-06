@@ -23,7 +23,10 @@ class FingerTip:
         self.radius = float(radius)
         # 物理影響を受けず手動で動かすため KINEMATIC を使用
         self.body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-        self.shape = pymunk.Circle(self.body, self.radius)
+        # 正方形の当たり判定（辺長 = 2 * radius）
+        self.shape = pymunk.Poly.create_box(
+            self.body, (self.radius * 2.0, self.radius * 2.0)
+        )
         # 必要に応じて基本的な摩擦/反発を設定（将来の当たり判定用）
         self.shape.friction = 0.9
         self.shape.elasticity = 0.2
@@ -58,10 +61,18 @@ class FingerTip:
         """デバッグ用に現在の円を画面上へ重ね描画する。"""
         cx, cy = int(self.body.position.x), int(self.body.position.y)
         r = int(self.radius)
-        cv2.circle(frame_bgr, (cx, cy), r, fill_color, -1)
+        # 中心 (cx, cy) に半径 r を用いて軸平行な正方形を描画
+        top_left = (cx - r, cy - r)
+        bottom_right = (cx + r, cy + r)
+        cv2.rectangle(frame_bgr, top_left, bottom_right, fill_color, -1)
         if border_thickness > 0:
-            cv2.circle(
-                frame_bgr, (cx, cy), r, border_color, border_thickness, cv2.LINE_AA
+            cv2.rectangle(
+                frame_bgr,
+                top_left,
+                bottom_right,
+                border_color,
+                border_thickness,
+                cv2.LINE_AA,
             )
 
 
@@ -84,8 +95,8 @@ class FingerBalancePhysics:
         self._screen_w: Optional[int] = None
 
         # 指先当たり判定（左右に1つずつ）
-        self.left_finger = FingerTip(space=self.space, radius=12.0)
-        self.right_finger = FingerTip(space=self.space, radius=12.0)
+        self.left_finger = FingerTip(space=self.space, radius=16.0)
+        self.right_finger = FingerTip(space=self.space, radius=16.0)
 
         # 横長長方形の基準寸法（実際の値は画面幅に応じて更新）
         # 横幅は「画面横幅の1/3」に設定される（rect_half_w はその半分）
@@ -323,28 +334,19 @@ class FingerBalancePhysics:
         rcx, rcy = int(self.right_finger.body.position.x), int(
             self.right_finger.body.position.y
         )
-        cv2.circle(
-            frame_bgr, (lcx, lcy), int(self.left_finger.radius), (0, 120, 255), -1
-        )
-        cv2.circle(
-            frame_bgr,
-            (lcx, lcy),
-            int(self.left_finger.radius),
-            (0, 0, 0),
-            2,
-            cv2.LINE_AA,
-        )
-        cv2.circle(
-            frame_bgr, (rcx, rcy), int(self.right_finger.radius), (0, 120, 255), -1
-        )
-        cv2.circle(
-            frame_bgr,
-            (rcx, rcy),
-            int(self.right_finger.radius),
-            (0, 0, 0),
-            2,
-            cv2.LINE_AA,
-        )
+        # 左指先の正方形描画
+        l_r = int(self.left_finger.radius)
+        l_tl = (lcx - l_r, lcy - l_r)
+        l_br = (lcx + l_r, lcy + l_r)
+        cv2.rectangle(frame_bgr, l_tl, l_br, (0, 120, 255), -1)
+        cv2.rectangle(frame_bgr, l_tl, l_br, (0, 0, 0), 2, cv2.LINE_AA)
+
+        # 右指先の正方形描画
+        r_r = int(self.right_finger.radius)
+        r_tl = (rcx - r_r, rcy - r_r)
+        r_br = (rcx + r_r, rcy + r_r)
+        cv2.rectangle(frame_bgr, r_tl, r_br, (0, 120, 255), -1)
+        cv2.rectangle(frame_bgr, r_tl, r_br, (0, 0, 0), 2, cv2.LINE_AA)
 
         def _draw_rect(body: pymunk.Body) -> None:
             x = float(body.position.x)

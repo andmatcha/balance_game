@@ -142,7 +142,7 @@ class GameApp:
             cfg=cfg, logic=GameLogic(cfg), physics=FingerBalancePhysics(cfg.stabilizer)
         )
 
-        self.cam = Camera(index=1, width=1280, height=720)
+        self.cam = Camera(width=1280, height=720)
         self.detector = PoseDetector(mirrored=True)
         self.timer = FrameTimer()
         self.sm = ScreenManager()
