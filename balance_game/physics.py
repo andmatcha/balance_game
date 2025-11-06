@@ -87,9 +87,11 @@ class FingerBalancePhysics:
         self.left_finger = FingerTip(space=self.space, radius=12.0)
         self.right_finger = FingerTip(space=self.space, radius=12.0)
 
-        # 横長長方形の寸法（長辺×3）
-        self.rect_half_w = 180.0  # 幅 360px 相当
-        self.rect_half_h = 10.0  # 高さ 20px 相当
+        # 横長長方形の基準寸法（実際の値は画面幅に応じて更新）
+        # 横幅は「画面横幅の1/3」に設定される（rect_half_w はその半分）
+        self.rect_half_w = 180.0
+        # 既定のアスペクト比（W:H = 18:1）に基づく初期値
+        self.rect_half_h = 10.0
 
         # 左右の長方形
         self.left_rect_body: Optional[pymunk.Body] = None
@@ -125,6 +127,17 @@ class FingerBalancePhysics:
         self._unstable_time_s = 0.0
 
     # ---- core ----
+    def _update_rect_size_by_screen(self) -> None:
+        """画面横幅に応じて長方形の寸法を更新する（横幅=画面幅の1/3）。"""
+        if self._screen_w is None:
+            return
+        full_w = float(self._screen_w) / 4.0
+        # 半幅（rect_half_w）は全幅の半分
+        self.rect_half_w = full_w / 2.0
+        # 既存のアスペクト比（W:H = 18:1）を維持して高さを算出
+        full_h = full_w / 18.0
+        self.rect_half_h = full_h / 2.0
+
     def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
         # 指先直上に重心が来るよう配置（side: "left"|"right"）
         mass = 6.0
@@ -249,6 +262,8 @@ class FingerBalancePhysics:
             self._screen_h = int(frame_h)
         if frame_w is not None:
             self._screen_w = int(frame_w)
+        # 画面幅に応じた長方形サイズ更新（スポーン前に反映される）
+        self._update_rect_size_by_screen()
         # 時間刻み（クランプ）
         dt = max(
             1.0 / 240.0,
