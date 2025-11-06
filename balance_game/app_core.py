@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Tuple
 
+# 編集しました
 import cv2
 
 from .camera import Camera
