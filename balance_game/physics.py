@@ -84,7 +84,7 @@ class FingerBalancePhysics:
     - 長方形の下端が指先より下に抜けたらゲームオーバー
     """
 
-    def __init__(self, stabilizer: StabilizerConfig):
+    def __init__(self, stabilizer: StabilizerConfig, rect_image_path: str = None):
         self._stabilizer = stabilizer
 
         # 物理空間（画面座標系に合わせて +Y を下向きとする想定）
@@ -115,6 +115,28 @@ class FingerBalancePhysics:
         self._left_seen = False
         self._right_seen = False
         self._unstable_time_s: float = 0.0
+
+        # 長方形用の画像を読み込み
+        if rect_image_path:
+            self._rect_img = cv2.imread(rect_image_path)
+            if self._rect_img is None:
+                print(f"警告: 画像 {rect_image_path} を読み込めませんでした")
+                
+        else:
+            self._rect_img = None
+ 
+        # 画像読み込み部分
+        print(f"[DEBUG] rect_image_path: {rect_image_path}")  # 追加
+        if rect_image_path:
+            self._rect_img = cv2.imread(rect_image_path)
+            if self._rect_img is None:
+                print(f"警告: 画像 {rect_image_path} を読み込めませんでした")
+                print(f"[DEBUG] 絶対パス: {os.path.abspath(rect_image_path)}")  # 追加
+            else:
+                print(f"[DEBUG] 画像読み込み成功！サイズ: {self._rect_img.shape}")  # 追加
+        else:
+            self._rect_img = None
+            print("[DEBUG] 画像パスが指定されていません")  # 追加
 
     # ---- lifecycle ----
     def reset(self) -> None:
@@ -354,27 +376,67 @@ class FingerBalancePhysics:
             a = float(body.angle)
             ca, sa = math.cos(a), math.sin(a)
             hw, hh = self.rect_half_w, self.rect_half_h
-            corners = [
-                (+hw, +hh),
-                (-hw, +hh),
-                (-hw, -hh),
-                (+hw, -hh),
-            ]
-            pts = []
-            for px, py in corners:
-                rx = x + (px * ca - py * sa)
-                ry = y + (px * sa + py * ca)
-                pts.append((int(rx), int(ry)))
-            cv2.fillPoly(frame_bgr, [np.array(pts, dtype=np.int32)], (0, 200, 255))
-            cv2.polylines(
-                frame_bgr,
-                [np.array(pts, dtype=np.int32)],
-                True,
-                (0, 0, 0),
-                2,
-                cv2.LINE_AA,
-            )
+            
+            # 画像がある場合
+            if hasattr(self, '_rect_img') and self._rect_img is not None:
+                # 画像のサイズを長方形に合わせる
+                img = cv2.resize(self._rect_img, (int(hw * 2), int(hh * 2)))
+                
+                # 回転後の画像サイズを計算
+                img_h, img_w = img.shape[:2]
+                diagonal = int(math.sqrt(img_h**2 + img_w**2)) + 2
+                
+                # 大きめのキャンバスを作成して中央に配置
+                canvas = np.zeros((diagonal, diagonal, 3), dtype=np.uint8)
+                offset_x = (diagonal - img_w) // 2
+                offset_y = (diagonal - img_h) // 2
+                canvas[offset_y:offset_y + img_h, offset_x:offset_x + img_w] = img
+                
+                # 回転
+                center = (diagonal // 2, diagonal // 2)
+                rot_mat = cv2.getRotationMatrix2D(center, -math.degrees(a), 1.0)
+                rotated = cv2.warpAffine(canvas, rot_mat, (diagonal, diagonal))
+                
+                # フレームに合成する位置を計算
+                top_left_x = int(x - diagonal // 2)
+                top_left_y = int(y - diagonal // 2)
+                
+                # 貼り付け範囲の計算（クリッピング）
+                src_y1 = max(0, -top_left_y)
+                src_y2 = min(diagonal, frame_bgr.shape[0] - top_left_y)
+                src_x1 = max(0, -top_left_x)
+                src_x2 = min(diagonal, frame_bgr.shape[1] - top_left_x)
+                
+                dst_y1 = max(0, top_left_y)
+                dst_y2 = dst_y1 + (src_y2 - src_y1)
+                dst_x1 = max(0, top_left_x)
+                dst_x2 = dst_x1 + (src_x2 - src_x1)
+                
+                # 範囲が有効な場合のみ描画
+                if src_y2 > src_y1 and src_x2 > src_x1:
+                    roi = rotated[src_y1:src_y2, src_x1:src_x2]
+                    
+                    # マスク作成（黒い部分=0,0,0を透過）
+                    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                    mask = (gray > 10).astype(np.uint8)  # 閾値10で2値化
+                    mask_3ch = np.stack([mask, mask, mask], axis=2)  # 3チャンネルに拡張
+                    
+                    # 背景と合成（NumPy配列演算）
+                    bg = frame_bgr[dst_y1:dst_y2, dst_x1:dst_x2]
+                    blended = np.where(mask_3ch > 0, roi, bg)
+                    frame_bgr[dst_y1:dst_y2, dst_x1:dst_x2] = blended
+            else:
+                # 画像がない場合は黄色で描画
+                corners = [(+hw, +hh), (-hw, +hh), (-hw, -hh), (+hw, -hh)]
+                pts = []
+                for px, py in corners:
+                    rx = x + (px * ca - py * sa)
+                    ry = y + (px * sa + py * ca)
+                    pts.append((int(rx), int(ry)))
+                cv2.fillPoly(frame_bgr, [np.array(pts, dtype=np.int32)], (0, 200, 255))
+                cv2.polylines(frame_bgr, [np.array(pts, dtype=np.int32)], True, (0, 0, 0), 2, cv2.LINE_AA)
 
+        # 左右の長方形を描画
         if self.left_rect_body is not None:
             _draw_rect(self.left_rect_body)
         if self.right_rect_body is not None:

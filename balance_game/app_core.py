@@ -108,7 +108,7 @@ def handle_key_input(
     if key == ord("q"):
         quit_game = True
     elif key == ord("r"):
-        physics = FingerBalancePhysics(cfg.stabilizer)
+        physics = FingerBalancePhysics(cfg.stabilizer, rect_image_path="pizza-64.png")
         logic = GameLogic(cfg)
         sm.reset()
     elif key == ord("s"):
@@ -117,11 +117,11 @@ def handle_key_input(
     elif key == ord(" "):
         sfx.play_select()
         if sm.screen == Screen.TITLE:
-            physics = FingerBalancePhysics(cfg.stabilizer)
+            physics = FingerBalancePhysics(cfg.stabilizer, rect_image_path="pizza-64.png")
             logic = GameLogic(cfg)
             sm.screen = Screen.PREPARE
         elif sm.screen == Screen.RESULT:
-            physics = FingerBalancePhysics(cfg.stabilizer)
+            physics = FingerBalancePhysics(cfg.stabilizer, rect_image_path="pizza-64.png")
             logic = GameLogic(cfg)
             sm.screen = Screen.TITLE
     elif key in (ord("1"), ord("2"), ord("3")):
@@ -132,7 +132,7 @@ def handle_key_input(
         elif key == ord("3"):
             cfg.difficulty = "hard"
         cfg.stabilizer = DIFFICULTY_PRESETS[cfg.difficulty]
-        physics = FingerBalancePhysics(cfg.stabilizer)
+        physics = FingerBalancePhysics(cfg.stabilizer, rect_image_path="pizza-64.png")
         logic = GameLogic(cfg)
         sfx.play_difficulty_change()
 
@@ -143,7 +143,7 @@ class GameApp:
     def __init__(self, difficulty: str = "normal", target_fps: int = 30) -> None:
         cfg = default_game_config(difficulty=difficulty, target_fps=target_fps)
         self.state = AppState(
-            cfg=cfg, logic=GameLogic(cfg), physics=FingerBalancePhysics(cfg.stabilizer)
+            cfg=cfg, logic=GameLogic(cfg), physics=FingerBalancePhysics(cfg.stabilizer, rect_image_path="pizza-64.png")
         )
 
         self.cam = Camera(width=1280, height=720)
