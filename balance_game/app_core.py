@@ -142,13 +142,14 @@ class GameApp:
             cfg=cfg, logic=GameLogic(cfg), physics=FingerBalancePhysics(cfg.stabilizer)
         )
 
-        self.cam = Camera(index=1)
+        self.cam = Camera(index=1, width=1280, height=720)
         self.detector = PoseDetector(mirrored=True)
         self.timer = FrameTimer()
         self.sm = ScreenManager()
 
         self.window_name = "Balance Game"
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self.window_name, 1280, 720)
 
     def run(self) -> None:
         while True:
@@ -156,6 +157,8 @@ class GameApp:
             if frame is None:
                 break
             frame = cv2.flip(frame, 1)
+            # 表示・物理計算を 1280x720 ベースに統一
+            frame = cv2.resize(frame, (1280, 720))
 
             dt_s = self.timer.tick()
             det = self.detector.detect(frame)
