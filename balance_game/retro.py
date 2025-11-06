@@ -403,25 +403,74 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
     cv2.rectangle(panel, (12, 12), (pw - 13, ph - 13), border_inner, 3)
 
     # タイトル文字（拡大ネアレストでドット感を強調）
-    title = "BALANCE GAME"
-    small_h = 18
-    small_w = min(pw - 40, 520)
+    title = "PIZZA ACROBAT"
+    # 小さく描いてから整数スケールで拡大する（より大きく見せるため幅を小さめに）
+    small_h = 24
+    small_w = min(pw - 40, 360)
     small = np.full((small_h, small_w, 3), bg, dtype=np.uint8)
+    # 情報テキスト用は従来通り SIMPLEX を使う
     font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = 0.5
-    thick = 1
-    (tw, th), _ = cv2.getTextSize(title, font, scale, thick)
+    # タイトルは太めで見栄えの良い TRIPLEX を使用
+    title_font = cv2.FONT_HERSHEY_TRIPLEX
+    title_scale = 0.8
+    # タイトルが枠からはみ出す場合はスケールを自動調整
+    (tw, th), _ = cv2.getTextSize(title, title_font, title_scale, 2)
+    if tw > small_w - 8:
+        title_scale = title_scale * (small_w - 8) / max(1, tw)
+        (tw, th), _ = cv2.getTextSize(title, title_font, title_scale, 2)
     tx = max(0, (small_w - tw) // 2)
     ty = (small_h + th) // 2 - 2
-    cv2.putText(small, title, (tx + 1, ty + 1), font, scale, (0, 0, 0), 2, cv2.LINE_8)
+    # 多重ストロークでインパクトを出す（影→枠→縁→本体）
+    shadow_thick = max(2, int(round(4 * title_scale)))
+    accent_thick = max(2, int(round(3 * title_scale)))
+    fill_thick = max(1, int(round(2 * title_scale)))
+    stroke_thick = max(accent_thick + 1, int(round(5 * title_scale)))
+    main_color = tuple(int(c) for c in PYXEL_PALETTE_BGR[7])  # off-white
+    accent_color = tuple(int(c) for c in PYXEL_PALETTE_BGR[9])  # orange
+    shadow_color = tuple(int(c) for c in PYXEL_PALETTE_BGR[1])  # dark navy (非黒)
+    stroke_color = tuple(int(c) for c in PYXEL_PALETTE_BGR[5])  # dark gray (非黒)
+    # 影（ドロップシャドウ）
+    cv2.putText(
+        small,
+        title,
+        (tx + 2, ty + 2),
+        title_font,
+        title_scale,
+        shadow_color,
+        shadow_thick,
+        cv2.LINE_8,
+    )
+    # 外枠（非黒で透過回避）
     cv2.putText(
         small,
         title,
         (tx, ty),
-        font,
-        scale,
-        tuple(int(c) for c in PYXEL_PALETTE_BGR[7]),  # off-white in Pyxel palette
-        1,
+        title_font,
+        title_scale,
+        stroke_color,
+        stroke_thick,
+        cv2.LINE_8,
+    )
+    # 縁（アクセントカラー）
+    cv2.putText(
+        small,
+        title,
+        (tx, ty),
+        title_font,
+        title_scale,
+        accent_color,
+        accent_thick,
+        cv2.LINE_8,
+    )
+    # 本体（白系）
+    cv2.putText(
+        small,
+        title,
+        (tx, ty),
+        title_font,
+        title_scale,
+        main_color,
+        fill_thick,
         cv2.LINE_8,
     )
 
