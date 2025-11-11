@@ -505,7 +505,7 @@ def render_pyxel_title_overlay(frame_bgr: np.ndarray, difficulty: str) -> None:
         )
         cv2.putText(panel, text, (tx2, ty2), font, 0.55, color, 1, cv2.LINE_8)
 
-    put_line(f"Difficulty: {difficulty}", 0.55, 10)
+    put_line(f"DIFFICULTY: {difficulty.upper()}", 0.55, 10)
     put_line("[1/2/3] Change difficulty", 0.62, 6)
     put_line("[SPACE] Start", 0.69, 11)
     put_line("[Q] Quit", 0.76, 8)
