@@ -187,7 +187,7 @@ class GameApp:
         
         #  背景画像の読み込み 
         self.background_img = None
-        FILE_NAME = "haikei1.png"
+        FILE_NAME = "haikei_pisa.png"
         
     
         fallback_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", FILE_NAME)
