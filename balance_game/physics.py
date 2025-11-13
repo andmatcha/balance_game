@@ -83,9 +83,36 @@ class FingerBalancePhysics:
     - 横長長方形（Dynamic）はゲーム開始時に指先の直上へ配置
     - 長方形の下端が指先より下に抜けたらゲームオーバー
     """
+    
+    #外乱と難易度に関するプライベート変数
+    _disturbance_force_strength: float = 0.0  # 横移動
+    _disturbance_torque_strength: float = 0.0 # 角速度変化量
+    _difficulty: str = 'normal'
 
-    def __init__(self, stabilizer: StabilizerConfig, rect_image_path: str = None):
+    # 難易度と外乱
+    def __init__(self, stabilizer: StabilizerConfig, rect_image_path: str = None, difficulty: str = 'normal'):
         self._stabilizer = stabilizer
+        self._difficulty = difficulty.lower()
+
+        # 外乱の最大強度設定 (Force: N, Torque: rad/s)
+        if self._difficulty == 'easy':
+            self._disturbance_force_strength = 0.0
+            self._disturbance_torque_strength = 0.0
+        elif self._difficulty == 'normal':
+            self._disturbance_force_strength = 0.0
+            self._disturbance_torque_strength = 0.05
+        elif self._difficulty == 'hard':
+            self._disturbance_force_strength = 20000.0
+            self._disturbance_torque_strength = 0.05
+        elif self._difficulty == 'demo':
+            self._disturbance_force_strength = 8000.0
+            self._disturbance_torque_strength = 0.3
+        else:
+            # デフォルトの場合
+            self._disturbance_force_strength = 20000.0 
+            self._disturbance_torque_strength = 0.05
+            
+        
 
         # 物理空間（画面座標系に合わせて +Y を下向きとする想定）
         self.space = pymunk.Space()
@@ -124,14 +151,15 @@ class FingerBalancePhysics:
                 
         else:
             self._rect_img = None
- 
+    
         # 画像読み込み部分
         print(f"[DEBUG] rect_image_path: {rect_image_path}")  # 追加
         if rect_image_path:
             self._rect_img = cv2.imread(rect_image_path)
             if self._rect_img is None:
                 print(f"警告: 画像 {rect_image_path} を読み込めませんでした")
-                print(f"[DEBUG] 絶対パス: {os.path.abspath(rect_image_path)}")  # 追加
+                # osモジュールがインポートされていないため、以下の行はコメントアウトを推奨
+                # print(f"[DEBUG] 絶対パス: {os.path.abspath(rect_image_path)}")  # 追加
             else:
                 print(f"[DEBUG] 画像読み込み成功！サイズ: {self._rect_img.shape}")  # 追加
         else:
@@ -171,6 +199,36 @@ class FingerBalancePhysics:
         full_h = full_w / 18.0
         self.rect_half_h = full_h / 2.0
 
+    def _apply_random_disturbance(self) -> None:
+        """長方形に難易度に応じた外乱（力と角速度インパルス）を適用する。
+           角速度インパルスは毎フレーム完全にランダムな値を使用する。
+        """
+        
+        # __init__で設定された最大強度を用いて乱数を生成
+        rand_force_x = np.random.uniform(
+            -self._disturbance_force_strength, self._disturbance_force_strength
+        )
+        #角速度の乱数
+        rand_angular_vel_change_left = np.random.uniform(
+            -self._disturbance_torque_strength, self._disturbance_torque_strength
+        )
+        rand_angular_vel_change_right = np.random.uniform(
+            -self._disturbance_torque_strength, self._disturbance_torque_strength
+        )
+            
+        # 左の長方形に適用
+        if self.left_rect_body is not None:
+         
+            self.left_rect_body.force = (rand_force_x, 0.0) 
+      
+            self.left_rect_body.angular_velocity += rand_angular_vel_change_left 
+            
+        # 右の長方形に適用
+        if self.right_rect_body is not None:
+            self.right_rect_body.force = (rand_force_x, 0.0)
+            self.right_rect_body.angular_velocity += rand_angular_vel_change_right
+
+
     def _spawn_rect(self, side: str, fx: float, fy: float) -> None:
         # 指先直上に重心が来るよう配置（side: "left"|"right"）
         mass = 6.0
@@ -197,6 +255,9 @@ class FingerBalancePhysics:
             self.right_rect_shape = shape
 
     # ---- helpers (判定ロジックのカプセル化) ----
+    # ... (中略: _aabb, _is_visible, _is_off_finger_horizontally, _is_entirely_below_finger, _evaluate_unstable_conditions は変更なし)
+    # ...
+
     def _aabb(self, body: pymunk.Body) -> tuple[float, float, float, float]:
         x = float(body.position.x)
         y = float(body.position.y)
@@ -316,6 +377,10 @@ class FingerBalancePhysics:
             self._spawn_rect("left", float(lkp.x), float(lkp.y))
             self._spawn_rect("right", float(rkp.x), float(rkp.y))
             self._spawned = True
+
+        # 外乱の適用 (スポーン後に実行)
+        if self._spawned:
+            self._apply_random_disturbance()
 
         # 物理ステップをサブステップ化してトンネリングを軽減
         max_substep = 1.0 / 240.0
