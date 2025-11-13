@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict
 
 from .types import GameConfig, StabilizerConfig
-
-
-ASSETS_DIR = Path(__file__).resolve().parent / "assets"
-IMAGES_DIR = ASSETS_DIR / "images"
-SOUNDS_DIR = ASSETS_DIR / "sounds"
 
 
 EASY = StabilizerConfig(max_tilt_deg=18.0, max_jerk=0.8, clear_seconds=5.0)

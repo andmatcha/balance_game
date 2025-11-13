@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from typing import Optional
+from typing import TYPE_CHECKING
 
 import cv2
-import numpy as np
+
+if TYPE_CHECKING:
+    import numpy as np
 
 from .types import DetectionResult, Keypoints2D, Point2D
 
